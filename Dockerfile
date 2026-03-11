@@ -1,21 +1,11 @@
-FROM maven:3.9-eclipse-temurin-17 AS build
-
+FROM gradle:8.6-jdk21 AS builder
 WORKDIR /app
-
-COPY pom.xml .
-RUN mvn dependency:go-offline
-
+COPY build.gradle.kts settings.gradle.kts ./
 COPY src ./src
-RUN mvn clean package -DskipTests
+RUN gradle bootJar --no-daemon
 
-FROM eclipse-temurin:17-jre
-
+FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
-
-COPY --from=build /app/target/*.jar app.jar
-
-ENV APP_PORT=8080
-
-EXPOSE ${APP_PORT}
-
+COPY --from=builder /app/build/libs/*.jar app.jar
+EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]
