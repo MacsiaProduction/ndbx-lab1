@@ -1,10 +1,27 @@
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    build: .
     ports:
-      - "${APP_HOST}:${APP_PORT}:${APP_PORT}"
-    env_file:
-      - .env.local
-    container_name: eventhub-app
+      - "${APP_PORT}:${APP_PORT}"
+    environment:
+      APP_PORT: ${APP_PORT}
+      APP_USER_SESSION_TTL: ${APP_USER_SESSION_TTL}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_DB: ${REDIS_DB}
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  redis:
+    image: redis:8-alpine
+    container_name: ${REDIS_HOST}
+    command: redis-server --port ${REDIS_PORT}
+    ports:
+      - "${REDIS_PORT}:${REDIS_PORT}"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "${REDIS_PORT}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
