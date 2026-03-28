@@ -1,11 +1,13 @@
 package com.ndbx.lab2.service
 
 import com.ndbx.lab2.config.AppSessionProperties
+import org.springframework.data.redis.connection.RedisConnection
+import org.springframework.data.redis.core.RedisCallback
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Service
+import java.nio.charset.StandardCharsets
 import java.time.Instant
 import java.util.UUID
-import java.util.concurrent.TimeUnit
 
 @Service
 class SessionService(
@@ -24,13 +26,18 @@ class SessionService(
     fun createSession(sid: String): Boolean {
         val key = key(sid)
         val now = Instant.now().toString()
-        val hashOps = redisTemplate.opsForHash<String, String>()
-        val created = hashOps.putIfAbsent(key, "created_at", now)
-        if (created) {
-            hashOps.put(key, "updated_at", now)
-            redisTemplate.expire(key, sessionProperties.ttl, TimeUnit.SECONDS)
-        }
-        return created
+        val ttl = sessionProperties.ttl.toString()
+        val reply = redisTemplate.execute(RedisCallback { conn: RedisConnection ->
+            conn.execute(
+                "HSETEX",
+                utf8(key), utf8("FNX"),
+                utf8("EX"), utf8(ttl),
+                utf8("FIELDS"), utf8("2"),
+                utf8("created_at"), utf8(now),
+                utf8("updated_at"), utf8(now),
+            )
+        })
+        return hsetexOk(reply)
     }
 
     fun createUniqueSession(): String {
@@ -43,13 +50,25 @@ class SessionService(
 
     fun touchSession(sid: String): Boolean {
         val key = key(sid)
-        if (!redisTemplate.hasKey(key)) return false
-        redisTemplate.opsForHash<String, String>().put(key, "updated_at", Instant.now().toString())
-        redisTemplate.expire(key, sessionProperties.ttl, TimeUnit.SECONDS)
-        return true
+        val now = Instant.now().toString()
+        val ttl = sessionProperties.ttl.toString()
+        val reply = redisTemplate.execute(RedisCallback { conn: RedisConnection ->
+            conn.execute(
+                "HSETEX",
+                utf8(key), utf8("FXX"),
+                utf8("EX"), utf8(ttl),
+                utf8("FIELDS"), utf8("1"),
+                utf8("updated_at"), utf8(now),
+            )
+        })
+        return hsetexOk(reply)
     }
 
     fun getTtl() = sessionProperties.ttl
 
     private fun key(sid: String) = "$SESSION_PREFIX$sid"
+
+    private fun utf8(s: String) = s.toByteArray(StandardCharsets.UTF_8)
+
+    private fun hsetexOk(reply: Any?) = (reply as? Number)?.toLong() == 1L
 }

@@ -17,6 +17,7 @@ Thumbs.db
 # ============================================
 .idea/
 .vscode/
+.cursor/
 .obsidian/
 *.sublime-project
 *.sublime-workspace
@@ -37,6 +38,7 @@ Thumbs.db
 *.log
 tmp/
 logs/
+bin/
 
 # ============================================
 # Docker
