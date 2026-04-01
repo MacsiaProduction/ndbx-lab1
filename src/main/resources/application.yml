@@ -12,3 +12,9 @@ spring:
 app:
   session:
     ttl: ${APP_USER_SESSION_TTL:3600}
+  mongodb:
+    database: ${MONGODB_DATABASE:eventhub}
+    user: ${MONGODB_USER:}
+    password: ${MONGODB_PASSWORD:}
+    host: ${MONGODB_HOST:localhost}
+    port: ${MONGODB_PORT:27017}

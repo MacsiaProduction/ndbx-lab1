@@ -10,9 +10,29 @@ services:
       REDIS_PORT: ${REDIS_PORT}
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       REDIS_DB: ${REDIS_DB}
+      MONGODB_DATABASE: ${MONGODB_DATABASE}
+      MONGODB_USER: ${MONGODB_USER}
+      MONGODB_PASSWORD: ${MONGODB_PASSWORD}
+      MONGODB_HOST: ${MONGODB_HOST}
+      MONGODB_PORT: ${MONGODB_PORT}
     depends_on:
       redis:
         condition: service_healthy
+      mongo:
+        condition: service_healthy
+
+  mongo:
+    image: mongo:7
+    container_name: ${MONGODB_HOST}
+    ports:
+      - "${MONGODB_PORT}:${MONGODB_PORT}"
+    command: ["mongod", "--port", "${MONGODB_PORT}"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--port", "${MONGODB_PORT}", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   redis:
     image: redis:8-alpine

@@ -1,7 +1,7 @@
 package com.ndbx.lab2.controller
 
 import com.ndbx.lab2.service.SessionService
-import jakarta.servlet.http.Cookie
+import com.ndbx.lab2.web.SessionCookies
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.CookieValue
@@ -21,22 +21,13 @@ class SessionController(private val sessionService: SessionService) {
             ?.takeIf { sessionService.touchSession(it) }
 
         return if (existingSid != null) {
-            addSessionCookie(response, existingSid, sessionService.getTtl())
+            SessionCookies.setSession(response, existingSid, sessionService.getTtl().toInt())
             ResponseEntity.ok().build()
         } else {
             val newSid = sessionService.createUniqueSession()
-            addSessionCookie(response, newSid, sessionService.getTtl())
+            SessionCookies.setSession(response, newSid, sessionService.getTtl().toInt())
             ResponseEntity.status(201).build()
         }
-    }
-
-    private fun addSessionCookie(response: HttpServletResponse, sid: String, ttl: Long) {
-        val cookie = Cookie(SESSION_COOKIE, sid).apply {
-            isHttpOnly = true
-            path = "/"
-            maxAge = ttl.toInt()
-        }
-        response.addCookie(cookie)
     }
 
     companion object {
