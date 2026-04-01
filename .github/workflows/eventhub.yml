@@ -24,9 +24,27 @@ jobs:
         run: |
           LAB=$(.github/scripts/lab_number.sh)
           echo "lab=$LAB" >> $GITHUB_OUTPUT
-    
-  autograder:
+
+  lab1:
     needs: runtime_config
-    uses: sitnikovik/ndbx/.github/workflows/eventhub.yml@main
+    if: ${{ needs.runtime_config.outputs.lab >= 1 }}
+    uses: sitnikovik/ndbx/.github/workflows/reusable_eventhub_lab1.yml@main
     with:
-      lab: ${{ needs.runtime_config.outputs.lab }}
+      scripts_dir: ".github/scripts"
+      lab_check_dir: "autograder/cmd/lab1"
+
+  lab2:
+    needs: runtime_config
+    if: ${{ needs.runtime_config.outputs.lab >= 2 }}
+    uses: sitnikovik/ndbx/.github/workflows/reusable_eventhub_lab2.yml@main
+    with:
+      scripts_dir: ".github/scripts"
+      lab_check_dir: "autograder/cmd/lab2"
+
+  lab3:
+    needs: runtime_config
+    if: ${{ needs.runtime_config.outputs.lab >= 3 }}
+    uses: sitnikovik/ndbx/.github/workflows/reusable_eventhub_lab3.yml@main
+    with:
+      scripts_dir: ".github/scripts"
+      lab_check_dir: "autograder/cmd/lab3"
