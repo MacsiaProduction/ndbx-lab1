@@ -14,7 +14,6 @@ import com.ndbx.lab2.service.SessionService
 import com.ndbx.lab2.support.RequestSupport
 import com.ndbx.lab2.web.SessionCookies
 import jakarta.servlet.http.HttpServletResponse
-import org.bson.types.ObjectId
 import org.springframework.dao.DuplicateKeyException
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
@@ -63,7 +62,7 @@ class EventController(
             description = req.description?.takeIf { it.isNotBlank() },
             location = EventLocation(address = address),
             createdAt = createdAt,
-            createdBy = ObjectId(userIdHex),
+            createdBy = userIdHex,
             startedAt = startedAt,
             finishedAt = finishedAt,
         )
@@ -130,7 +129,7 @@ class EventController(
         description = e.description,
         location = EventLocationJson(address = e.location.address),
         createdAt = e.createdAt,
-        createdBy = e.createdBy.toHexString(),
+        createdBy = e.createdBy,
         startedAt = e.startedAt,
         finishedAt = e.finishedAt,
     )

@@ -16,7 +16,7 @@ data class EventDocument(
     @Field("description") val description: String?,
     @Field("location") val location: EventLocation,
     @Field("created_at") val createdAt: String,
-    @Field("created_by") val createdBy: ObjectId,
+    @Field("created_by") val createdBy: String,
     @Field("started_at") val startedAt: String,
     @Field("finished_at") val finishedAt: String,
 )
