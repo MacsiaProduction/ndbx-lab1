@@ -1,6 +1,8 @@
 package com.ndbx.lab2.support
 
+import java.time.LocalDate
 import java.time.OffsetDateTime
+import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 
 object RequestSupport {
@@ -17,6 +19,13 @@ object RequestSupport {
     fun parseRfc3339(s: String): OffsetDateTime? =
         try {
             OffsetDateTime.parse(s)
+        } catch (_: DateTimeParseException) {
+            null
+        }
+
+    fun parseCompactDate(s: String): LocalDate? =
+        try {
+            LocalDate.parse(s, DateTimeFormatter.BASIC_ISO_DATE)
         } catch (_: DateTimeParseException) {
             null
         }
