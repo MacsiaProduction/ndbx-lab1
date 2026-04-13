@@ -23,6 +23,11 @@ class MongoIndexConfiguration(
         mongoTemplate.indexOps(EventDocument::class.java).apply {
             ensureIndex(Index().on("title", Sort.Direction.ASC))
             ensureIndex(Index().on("created_by", Sort.Direction.ASC))
+            ensureIndex(
+                Index()
+                    .on("title", Sort.Direction.ASC)
+                    .on("created_by", Sort.Direction.ASC),
+            )
             ensureIndex(Index().on("category", Sort.Direction.ASC))
             ensureIndex(Index().on("price", Sort.Direction.ASC))
             ensureIndex(Index().on("location.city", Sort.Direction.ASC))
