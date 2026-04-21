@@ -347,8 +347,9 @@ Content-Type: application/json
 Добавьте следующие переменные в `.env.local`:
 
 ```sh
-# Название базы данных в MongoDB
-MONGODB_DATABSE="eventhub" # или любое другое на ваше усмотрение
+# Название основной базы данных в MongoDB
+MONGODB_EVENTHUB_DATABASE="eventhub" # предпочтительное имя переменной
+MONGODB_DATABASE="eventhub" # оставлено для совместимости с автопроверкой
 # Имя пользователя для аутентификации в MongoDB
 MONGODB_USER=your_mongodb_username
 # Пароль для аутентификации в MongoDB
