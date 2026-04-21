@@ -16,16 +16,22 @@ import java.util.UUID
 @Service
 class SessionService(
     private val redisTemplate: StringRedisTemplate,
-    private val sessionProperties: AppSessionProperties
+    private val sessionProperties: AppSessionProperties,
 ) {
     companion object {
         private const val SESSION_PREFIX = "sid:"
         private val SID_PATTERN = Regex("^[0-9a-f]{32}$")
+        const val CREATED_AT_FIELD = "created_at"
+        const val UPDATED_AT_FIELD = "updated_at"
+        const val USER_ID_FIELD = "user_id"
     }
 
     fun generateSid() = UUID.randomUUID().toString().replace("-", "")
 
     fun isValidSid(sid: String) = SID_PATTERN.matches(sid)
+
+    fun resolveSession(sidCookie: String?): String? =
+        sidCookie?.takeIf { isValidSid(it) && sessionExists(it) }
 
     fun createSession(sid: String): Boolean {
         val key = key(sid)
@@ -37,8 +43,8 @@ class SessionService(
                 utf8(key), utf8("FNX"),
                 utf8("EX"), utf8(ttl),
                 utf8("FIELDS"), utf8("2"),
-                utf8("created_at"), utf8(now),
-                utf8("updated_at"), utf8(now),
+                utf8(CREATED_AT_FIELD), utf8(now),
+                utf8(UPDATED_AT_FIELD), utf8(now),
             )
         })
         return hsetexOk(reply)
@@ -52,21 +58,71 @@ class SessionService(
         error("Failed to generate a unique session id after retries")
     }
 
-    fun touchSession(sid: String): Boolean {
-        val key = key(sid)
+    fun createSessionWithUser(userId: String): String {
+        repeat(5) {
+            val sid = generateSid()
+            val k = key(sid)
+            val now = Instant.now().toString()
+            val ttl = sessionProperties.ttl.toString()
+            val reply = redisTemplate.execute(RedisCallback { conn: RedisConnection ->
+                hsetex(
+                    conn,
+                    utf8(k), utf8("FNX"),
+                    utf8("EX"), utf8(ttl),
+                    utf8("FIELDS"), utf8("3"),
+                    utf8(CREATED_AT_FIELD), utf8(now),
+                    utf8(UPDATED_AT_FIELD), utf8(now),
+                    utf8(USER_ID_FIELD), utf8(userId),
+                )
+            })
+            if (hsetexOk(reply)) return sid
+        }
+        error("Failed to generate a unique session id after retries")
+    }
+
+    fun bindUserToSession(sid: String, userId: String): Boolean {
+        val k = key(sid)
         val now = Instant.now().toString()
         val ttl = sessionProperties.ttl.toString()
         val reply = redisTemplate.execute(RedisCallback { conn: RedisConnection ->
             hsetex(
                 conn,
-                utf8(key), utf8("FXX"),
+                utf8(k), utf8("FXX"),
                 utf8("EX"), utf8(ttl),
-                utf8("FIELDS"), utf8("1"),
-                utf8("updated_at"), utf8(now),
+                utf8("FIELDS"), utf8("2"),
+                utf8(USER_ID_FIELD), utf8(userId),
+                utf8(UPDATED_AT_FIELD), utf8(now),
             )
         })
         return hsetexOk(reply)
     }
+
+    fun touchSession(sid: String): Boolean {
+        val k = key(sid)
+        val now = Instant.now().toString()
+        val ttl = sessionProperties.ttl.toString()
+        val reply = redisTemplate.execute(RedisCallback { conn: RedisConnection ->
+            hsetex(
+                conn,
+                utf8(k), utf8("FXX"),
+                utf8("EX"), utf8(ttl),
+                utf8("FIELDS"), utf8("1"),
+                utf8(UPDATED_AT_FIELD), utf8(now),
+            )
+        })
+        return hsetexOk(reply)
+    }
+
+    fun sessionExists(sid: String): Boolean =
+        redisTemplate.hasKey(key(sid))
+
+    fun getUserId(sid: String): String? {
+        val v = redisTemplate.opsForHash<String, String>().get(key(sid), USER_ID_FIELD)
+        return v?.takeIf { it.isNotBlank() }
+    }
+
+    fun deleteSession(sid: String): Boolean =
+        redisTemplate.delete(key(sid))
 
     fun getTtl() = sessionProperties.ttl
 

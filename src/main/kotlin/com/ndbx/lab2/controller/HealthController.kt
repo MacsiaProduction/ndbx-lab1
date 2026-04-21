@@ -2,7 +2,7 @@ package com.ndbx.lab2.controller
 
 import com.ndbx.lab2.controller.SessionController.Companion.SESSION_COOKIE
 import com.ndbx.lab2.service.SessionService
-import jakarta.servlet.http.Cookie
+import com.ndbx.lab2.web.SessionCookies
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.CookieValue
@@ -15,16 +15,9 @@ class HealthController(private val sessionService: SessionService) {
     @GetMapping("/health")
     fun health(
         @CookieValue(name = SESSION_COOKIE, required = false) sidCookie: String?,
-        response: HttpServletResponse
+        response: HttpServletResponse,
     ): ResponseEntity<Map<String, String>> {
-        if (sidCookie != null) {
-            val cookie = Cookie(SESSION_COOKIE, sidCookie).apply {
-                isHttpOnly = true
-                path = "/"
-                maxAge = sessionService.getTtl().toInt()
-            }
-            response.addCookie(cookie)
-        }
+        SessionCookies.echoSession(response, sidCookie, sessionService)
         return ResponseEntity.ok(mapOf("status" to "ok"))
     }
 }
