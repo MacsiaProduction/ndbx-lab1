@@ -1,4 +1,4 @@
-# Лабораторная работа №4
+# Лабораторная работа №5
 
 ## Подготовка
 
@@ -8,53 +8,31 @@
 
 ## Цель работы
 
-Реализовать шардирование и репликацию в MongoDB для коллекции `events` и `users`,
-а также добавить новые эндпоинты для редактирования мероприятий, поиска мероприятий и организаторов.
+Реализовать функционал реакций на мероприятия и их организаторов,
+используя [Apache Cassandra](https://cassandra.apache.org/)
+в качестве хранилище для них
+и [Redis](https://redis.io/) для их кэширования.
 
-## Задание
+## Эндпоинты
 
-### Редактирование мероприятий
+### Лайк на мероприятие
 
-Реализуйте новый эндпоинт `PATCH /events/{id}`, позволяющий редактировать данные о мероприятии.
+Реализуйте новый эндпоинт `POST /events/{event_id}/like`,
+который ставит лайк пользователя на понравившееся мероприятие.
 
-> 🔐 Доступ только у организатора мероприятия
+> 🔐 Доступно  **только авторизованным** пользователям
+
+**Запрос:**
 
 ```http
-PATCH /events/{id} HTTP/1.1
+POST /events/{event_id}/like HTTP/1.1
 Host: localhost:8000
 Content-Type: application/json
+Content-Length: 0
 Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d;
 ```
 
-В теле запроса добавляется несколько полей:
-
-- Категория
-- Цена билета
-- Наименование города
-
-```json
-{
-    "category": "концерт",
-    "price": 1000,
-    "city": "Москва"
-}
-```
-
-> ⚡️ Все цены передаем не в валюте, а просто в виде абстрактной единицы и только **целые числа**!
-
-- `category` *string* - категория мероприятия, добавляет/меняет в events.category в MongoDB,
-может принимать следующие значения:
-  - `meetup`
-  - `concert`
-  - `exhibition`
-  - `party`
-  - `other`
-- `price` *uint* - цена билета, добавляет/меняет в events.price в MongoDB
-- `city` *string*:
-  - при наличии значения добавляет/меняет в `events.location.city` в MongoDB
-  - при пустом значении в теле запроса - удаляет `events.location.city` в MongoDB
-
-**Ответ (при успешном обновлении):**
+**Ответ (OK):**
 
 ```http
 HTTP/1.1 204 No Content
@@ -62,70 +40,84 @@ Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max
 Content-Length: 0
 ```
 
-**Ответ (если мероприятие не найдено или пользователь не является его организатором):**
+**Ответ (мероприятие не найдено или нет доступа к нему):**
 
 ```http
 HTTP/1.1 404 Not Found
 Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
 Content-Type: application/json
-Content-Length: 81
-{"message": "Not found. Be sure that event exists and you are the organizer"}
-```
-
-**Ответ (если какой-то из параметров невалиден):**
-
-```http
-HTTP/1.1 400 Bad Request
-Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
-Content-Type: application/json
-Content-Length: 999
-{"message": "invalid \"{field_name}\" field"}
+Content-Length: 29
+{"message": "Event not found"}
 ```
 
 **Ответ (если пользователь не авторизован):**
 
 ```http
 HTTP/1.1 401 Unauthorized
+Content-Length: 0
+```
+
+### дизлайк на мероприятие
+
+Реализуйте новый эндпоинт `POST /events/{event_id}/dislike`,
+который ставит дизлайк пользователя на конкретное мероприятие.
+
+> 🔐 Доступно  **только авторизованным** пользователям
+
+**Запрос:**
+
+```http
+POST /events/{event_id}/dislike HTTP/1.1
+Host: localhost:8000
+Content-Type: application/json
+Content-Length: 0
+Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d;
+```
+
+**Ответ (OK):**
+
+```http
+HTTP/1.1 204 No Content
 Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
 Content-Length: 0
 ```
 
-### Поиск мероприятий
-
-Доработайте существующий эндпоинт `GET /events`, возвращающий список мероприятий, отвечающий параметрам поиска.
+**Ответ (мероприятие не найдено или нет доступа к нему):**
 
 ```http
-GET /events?category=party&city=Москва&price_to=0&started_date_from=20260314 HTTP/1.1
-Host: localhost:8000
-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d
+HTTP/1.1 404 Not Found
+Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
+Content-Type: application/json
+Content-Length: 29
+{"message": "Event not found"}
 ```
 
-Параметры фильтрации задаются через **GET-параметры**:
+**Ответ (если пользователь не авторизован):**
 
-- Все параметры из [предыдущей лабораторной работы](../03/README.md#просмотр-событий)
-- `id` *string* - id мероприятия (поиск по точному совпадению)
-- `category` *string* - категория мероприятия
-  - `meetup`
-  - `concert`
-  - `exhibition`
-  - `party`
-  - `other`
-- `price_from` *uint* - минимальная цена билета включительно
-- `price_to` *uint* - максимальная цена билета включительно
-- `city` *string* - город проведения мероприятия
-- `date_from` *string* - дата начала мероприятия не раньше этого значения (формат YYYYMMDD, например 20260314)
-- `date_to` *string* - дата начала мероприятия не позже этого значения (формат YYYYMMDD, например 20260314)
-- `user` *string* - никнейм пользователя, который создал мероприятие (поиск по точному совпадению)
+```http
+HTTP/1.1 401 Unauthorized
+Set-Cookie: X-Session-Id=; HttpOnly; Path=/; Max-Age=0
+Content-Length: 0
+```
 
-> 💡 Чтобы отобразить только бесплатные встречи - достаточно передать `price_to=0`
+### Реакции в мероприятиях
+
+Доработайте существующие эндпоинты `GET /events`, `GET /events/{event_id}`, `GET /users/{user_id}/events` так,
+чтобы при переданном параметре `include=reactions`,
+в каждом мероприятии возвращались счетчики всех его лайков (фильтры не применяются к ним)
+
+```http
+GET /events?include=reactions&limit=10 HTTP/1.1
+Host:localhost:8080
+Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d
+```
 
 **Ответ (события найдены):**
 
 ```http
 HTTP/1.1 200 ОК
-Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
 Content-Type: application/json
-Content-Length: 759
+Content-Length: 999
 ```
 
 ```json
@@ -133,348 +125,128 @@ Content-Length: 759
     "events": [
         {
             "id": "12e9c0b1a2b3c3d5e6f7a8b7",
-            "title": "Мой день рождения",
-            "category": "party",
-            "price": 0,
-            "description": "Приглашаю вас отпраздновать мое 30-с-чем-то-летие",
-            "location": {
-                "city": "Москва",
-                "address": "г. Москва, ул. Пушкина, дом Колотушкина"
-            },
-            "created_at": "2026-03-14T14:59:32+03:00",
-            "created_by": "65e9c0b1a2b3c4d5e6f7a8b9",
-            "started_at": "2026-04-01T12:00:00+03:00",
-            "finished_at": "2026-04-01T23:00:00+03:00",
+            // ...
+            "reactions": {
+                "likes": 24,
+                "dislikes": 3,
+            }
         },
     ],
     "count": 1
 }
 ```
 
-- `events` - список всех найденных событий
-- `count` - кол-во найденных событий и должно соответствовть размеру списка *events*
+> ⚠️ Все эндпоинты по мероприятиям должны возврщать объект `reactions` (при `?include=reactions` в запросе)
+даже если у мероприятия нет ни одной реакции/лайка как в Cassandra, так и Redis
 
-**Ответ (события НЕ найдены):**
+#### Подсчет реакций
 
-```http
-HTTP/1.1 200 ОК
-Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
-Content-Type: application/json
-Content-Length: 38
+Для вычисления кол-ва реакций для мероприятия нужно отобрать все-все встречи по их названиям,
+просуммировать реакции по ним и вернуть счетчики в endpoint'ах.
+
+Например, есть три спектакля "Алиса в стране чудес" на три разных времени.
+В MongoDB это создано как три разных сущности, но для пользователя они считается за одно мероприятие,
+которое проводится несколько раз в отведенное время.
+И пользователь должен видеть счетчик реакция как на одно мероприятие, а не на три разных.
+
+## Спецификация
+
+### Лайк мероприятия
+
+Лайки хранятся в Cassandra и Redis. Cassandra как основное хранилище, а Redis для кэширования чтения.
+Реализуйте подход [Cache-Aside](https://habr.com/ru/articles/991332/),
+при котором Redis будет "заполнятся" приложениям при запросе лайков из Cassandra.
+
+**TTL для лайков** в кэше задается через env-конфиг:
+
+```sh
+# Время жизни лайков в кэше в секундах.
+APP_LIKE_TTL=60
 ```
+
+> 💡 Так обеспечивается высокая доступность и быстрое чтение лайков
+
+#### Cassandra
+
+`event_reactions` - название таблицы реакций на мероприятия
+
+**Схема**:
+
+- `event_id` *text* - идентификатор мероприятия в MongoDB
+- `like_value` *tinyint* - значение записи
+  - `1` - лайк
+  - `-1` - дизлайк
+- `created_by` *string* - идентификатор пользователя в MongoDB, который оставил реакцию
+- `created_at` *timestamp* - дата и время создания/обновления реакции (в UTC)
+
+> 💡Подумайте над тем, какие индексы нужно создать для оптимизации запросов фильтрации выборки по `event_id`, `like_value` и `created_by`
+
+#### Redis
+
+**Ключ:**
+
+```plaintext
+event:{event_title_md5_hash}:reactions
+```
+
+`{event_title_md5_hash}` - хэш по алгоритму md5 для названия мероприятия.
+
+Например, для "Алиса в стране чудес" ключ будет
+
+```plaintext
+event:ba80405c3ebccb9cb99791b47c2487f9:reactions
+```
+
+**Значение:**
 
 ```json
 {
-    "events": [],
-    "count": 0
+    "likes": 24,
+    "dislikes": 3
 }
 ```
-
-**Ответ (если параметры невалидны):**
-
-```http
-HTTP/1.1 400 Bad Request
-Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
-Content-Length: 999
-Content-Type: application/json
-{"message": "invalid \"{field_name}\" field"}
-```
-
-### Мероприятие
-
-Реализуйте новый эндпоинт `GET /events/{id}` возвращающий подробные данные о событии или мероприятии.
-
-```http
-GET /events/12e9c0b1a2b3c3d5e6f7a8b7 HTTP/1.1
-Host: localhost:8000
-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d
-```
-
-**Ответ (мероприятие найдено):**
-
-```http
-HTTP/1.1 200 ОК
-Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
-Content-Type: application/json
-Content-Length: 591
-```
-
-```json
-{
-    "id": "12e9c0b1a2b3c3d5e6f7a8b7",
-    "title": "Мой день рождения",
-    "category": "party",
-    "price": 0,
-    "description": "Приглашаю вас отпраздновать мое 30-с-чем-то-летие",
-    "location": {
-        "city": "Москва",
-        "address": "г. Москва, ул. Пушкина, дом Колотушкина"
-    },
-    "created_at": "2026-03-14T14:59:32+03:00",
-    "created_by": "65e9c0b1a2b3c4d5e6f7a8b9",
-    "started_at": "2026-04-01T12:00:00+03:00",
-    "finished_at": "2026-04-01T23:00:00+03:00",
-}
-```
-
-**Ответ (мероприятие НЕ найдено):**
-
-**Индексы:**
-
-*Ожидается, как минимум, такой набор индексов:*
-
-- `title` *unique* - уникальный индекс по названиям событий
-- `title, created_by` - составной индекс по названию и автору
-- `created_by` - индекс по автору
 
 ### Конфигурация
 
 Добавьте следующие переменные в `.env.local`:
 
 ```sh
-# Название основной базы данных в MongoDB
-MONGODB_EVENTHUB_DATABASE="eventhub" # предпочтительное имя переменной
-MONGODB_DATABASE="eventhub" # оставлено для совместимости с автопроверкой
-# Имя пользователя для аутентификации в MongoDB
-MONGODB_USER=your_mongodb_username
-# Пароль для аутентификации в MongoDB
-MONGODB_PASSWORD=your_mongodb_password
-# Хост MongoDB сервера
-MONGODB_HOST=your_mongodb_container_name
-# Порт MongoDB сервера
-MONGODB_PORT=your_mongodb_container_port
+# Список хостов Cassandra в виде строки, разделенной запятыми (пока что один хост).
+CASSANDRA_HOSTS=cassandra-test
+# Порт Cassandra
+CASSANDRA_PORT=9042
+# Имя пользователя для подключения к Cassandra
+CASSANDRA_USERNAME=
+# Пароль для подключения к Cassandra
+CASSANDRA_PASSWORD=
+# Имя ключевого пространства Cassandra
+CASSANDRA_KEYSPACE="testkeyspace"
+# Уровень согласованности Cassandra
+CASSANDRA_CONSISTENCY="ONE"
 ```
-
-### Поиск организаторов
-
-Реализуйте новый эндпоинт `GET /users`, возвращающий список организаторов, отвечающий параметрам поиска.
-
-```http
-GET /users?name=Иван HTTP/1.1
-Host: localhost:8000
-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d
-```
-
-Параметры фильтрации задаются через **GET-параметры**:
-
-- `limit` *uint* - `(>= 0)` максимально количество в выборке (участвует в пагинации)
-- `offset` *uint* - `(>= 0)` кол-во, которое нужно пропустить (участвует в пагинации)
-- `name` *string* - имя организатора (поиск по вхождению, например "Иван" найдет "Иван Иванов", "Петр Иванов" и "Иван Петров")
-- `id` *string* - id организатора (поиск по точному совпадению)
-
-**Ответ (организаторы найдены):**
-
-```http
-HTTP/1.1 200 ОК
-Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
-Content-Type: application/json
-Content-Length: 203
-```
-
-```json
-{
-    "users": [
-        {
-            "id": "65e9c0b1a2b3c4d5e6f7a8b9",
-            "full_name": "Иван Иванов",
-            "username": "ivan_ivanov",
-        }
-    ],
-    "count": 1
-}
-```
-
-> ⚠️ Не возвращайте `password_hash`!
-
-**Ответ (организаторы не найдены):**
-
-```http
-HTTP/1.1 200 ОК
-Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
-Content-Type: application/json
-Content-Length: 37
-```
-
-```json
-{
-    "users": [],
-    "count": 0
-}
-```
-
-**Ответ (если параметры невалидны):**
-
-```http
-HTTP/1.1 400 Bad Request
-Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
-Content-Length: 999
-Content-Type: application/json
-{"message": "invalid \"{field_name}\" field"}
-```
-
-### Карточка организатора
-
-Реализуйте новый эндпоинт `GET /users/{id}`, возвращающий подробные данные об организаторе мероприятий.
-
-```http
-GET /users/65e9c0b1a2b3c4d5e6f7a8b9 HTTP/1.1
-Host: localhost:8000
-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d
-```
-
-**Ответ (организатор найден):**
-
-```http
-HTTP/1.1 200 ОК
-Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
-Content-Type: application/json
-Content-Length: 117
-```
-
-```json
-{
-    "id": "65e9c0b1a2b3c4d5e6f7a8b9",
-    "full_name": "Иван Иванов",
-    "username": "ivan_ivanov",
-}
-```
-
-> ⚠️ Не возвращайте `password_hash`!
-
-**Ответ (организатор НЕ найден):**
-
-```http
-HTTP/1.1 404 Not Found
-Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f97d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
-Content-Length: 24
-{"message": "Not found"}
-Content-Length: 0
-```
-
-### Мероприятия конкретного организатора
-
-Реализуйте новый эндпоинт `GET /users/{id}/events`, возвращающий список мероприятий по конкретному организатору
-
-```http
-GET /users/65e9c0b1a2b3c4d5e6f7a8b9/events HTTP/1.1
-Host: localhost:8000
-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d
-```
-
-**Ответ (мероприятия найдены):**
-
-```http
-HTTP/1.1 200 ОК
-Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f97d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
-Content-Type: application/json
-Content-Length: 760
-```
-
-```json
-{
-    "events": [
-        {
-            "id": "12e9c0b1a2b3c3d5e6f7a8b7",
-            "title": "Мой день рождения",
-            "category": "party",
-            "price": 0,
-            "description": "Приглашаю вас отпраздновать мое 30-с-чем-то-летие",
-            "location": {
-                "city": "Москва",
-                "address": "г. Москва, ул. Пушкина, дом Колотушкина"
-            },
-            "created_at": "2026-03-14T14:59:32+03:00",
-            "created_by": "65e9c0b1a2b3c4d5e6f7a8b9",
-            "started_at": "2026-04-01T12:00:00+03:00",
-            "finished_at": "2026-04-01T23:00:00+03:00",
-        }, 
-    ],
-    "count": 1
-}
-```
-
-**Ответ (мероприятия НЕ найдены):**
-
-```http
-HTTP/1.1 200 ОК
-Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f97d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
-Content-Type: application/json
-Content-Length: 38
-```
-
-```json
-{
-    "events": [],
-    "count": 0
-}
-```
-
-**Ответ (пользователь не найден):**
-
-```http
-HTTP/1.1 404 Not Found
-Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f97d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
-Content-Type: application/json
-Content-Length: 29
-{"message": "User not found"}
-```
-
-### Шардирование
-
-Реализуйте шардирование коллекции `events` по хэш-ключу `created_by` (id пользователя, который создал мероприятие).
-
-Коллекцию `users` можно не шардировать, достаточно репликации.
-
-### Репликация
-
-Реализуйте репликацию с помощью Replica Set в MongoDB.
-
-Для каждого шарда должен быть:
-
-- 1 primary-нода
-- 2 secondary-ноды
-
-> ⚠️ На каждой ноде должен быть запущен отдельный экземпляр MongoDB,
-с разными портами и разными директориями для хранения данных!
 
 ## FAQ
 
-**Q: Зачем нужно шардирование, если у нас не так много данных?**  
-**A:** Шардирование необходимо для масштабирования базы данных и обеспечения высокой доступности.
-Даже если у нас сейчас всего 1000 мероприятий, в будущем их количество может значительно вырасти,
-и шардирование позволит эффективно распределять нагрузку между несколькими серверами.
+**Q: Нужно ли заполнять кэш лайками, если нет соответствующей записи в Cassandra?**
+A: Нет. В кэш пишем только данные только по существующим данным.
+Но так или иначе, в эндпоинтах [возвращаем](#реакции-в-мероприятиях) `reactions` c нулями.
 
-**Q: Нужно ли использовать Kubernetes?**  
-**A:** Нет, для этой лабораторной работы достаточно запустить несколько экземпляров MongoDB в docker-контейнерах.
-Главное - обеспечить правильную конфигурацию для шардирования и репликации.
+**Q: Что должно произойти, если пользователь пытается лайкнуть несколько раз подряд?**
+A: Если лайк уже был - произойдет обновления даты создания текущей записи. Если до этого записи не было — создасться новая.
 
-**Q: Как проверить, что шардирование и репликация работают правильно?**  
-**A:** Вы можете использовать MongoDB Shell или MongoDB Compass или другие инструмент
-для проверки состояния шардирования и репликации.
-Для шардирования проверьте, что коллекция `events` распределена между несколькими шардами.
-Для репликации проверьте, что у вас есть одна primary-нода и две secondary-ноды, и что данные реплицируются между ними.
+**Q: Нужно ли удалять лайк при дизлайке?**
+A: Нет, лайк не удаляется, а обновляется на дизлайк. И наоборот, при отправке `POST /events/{event_id}/like` при наличии дизлайка, он обновляется на лайк. Таким образом, у пользователя может быть только одна реакция на мероприятие — либо лайк, либо дизлайк, либо их отсутствие. Не ищите лайк, чтобы проверить, что он есть.
 
-**Q: Какие значения считаются валидными для поля category?**  
-**A:** Валидными значениями для поля `category` являются только те, которые указаны в условии задачи.
-Любое другое значение будет считаться невалидным и должно приводить к ошибке 400 Bad Request.
+**Q: Что если встреч с одинаковым названием несколько, а реакции "привязываются" к мероприятиям по их идентификаторам?**
+A: В эндпоинтах возвращаются все-все реакции по мероприятиям, но в Cassandra они записываются как к разным сущностям.
+Вы должны отобрать все встречи по их названиям и посчитать все реакции от всех пользователей.
 
-**Q: Что делать, если в `PATCH /events/{id}` передано поле, которого нет в спецификации**  
-**A:** Игнорировать это поле и не возвращать ошибку. Обновлять только те поля, которые указаны в спецификации.
+**Q: Кто может оставлять реакции?**
+A: Любой авторизованный пользователь может оставлять реакции на все мероприятия, независимо от того является ли он владельцем или нет.
 
-**Q: Как обрабатывать пустую строку в поле city в `PATCH /events/{id}`?**  
-**A:** Если в поле `city` передана пустая строка, это означает,
-что нужно удалить `events.location.city` в MongoDB для данного мероприятия.
+**Q: Нужно ли подготовить Cassandra перед использованием?**
+A: Да, необходимо создать ключевое пространство (аналог БД в РСУБД) и таблицу `event_reactions`
+согласно спецификации выше при запуске приложения через `make run`.
 
-**Q: Как проверить, что пользователь — организатор мероприятия?**  
-**A:** Для проверки, что пользователь является организатором мероприятия,
-нужно сравнить `created_by` мероприятия с `id` пользователя, который делает запрос.
-Если они совпадают, значит пользователь является организатором и имеет право редактировать мероприятие.
-Если нет, то нужно вернуть ошибку 404 Not Found
-или 401 Unauthorized, в зависимости от того, авторизован ли пользователь или нет.
-
-**Q: Как проверить, что пользователь — организатор мероприятия?**  
-**A:** Для проверки, что пользователь является организатором мероприятия,
-нужно сравнить `created_by` мероприятия с `id` пользователя, который делает запрос.
-Если они совпадают, значит пользователь является организатором и имеет право редактировать мероприятие.
-Если нет, то нужно вернуть ошибку 404 Not Found
-или 401 Unauthorized, в зависимости от того, авторизован ли пользователь или нет.
+**Q: Сколько реплик Cassandra необходимо?**
+A: В рамках этой лабороторной работы реализуем только один инстанс Apache Cassandra.

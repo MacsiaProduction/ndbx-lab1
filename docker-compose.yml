@@ -16,9 +16,18 @@ services:
       MONGODB_PASSWORD: ${MONGODB_PASSWORD}
       MONGODB_HOST: ${MONGODB_HOST}
       MONGODB_PORT: ${MONGODB_PORT}
+      APP_LIKE_TTL: ${APP_LIKE_TTL}
+      CASSANDRA_HOSTS: ${CASSANDRA_HOSTS}
+      CASSANDRA_PORT: ${CASSANDRA_PORT}
+      CASSANDRA_USERNAME: ${CASSANDRA_USERNAME}
+      CASSANDRA_PASSWORD: ${CASSANDRA_PASSWORD}
+      CASSANDRA_KEYSPACE: ${CASSANDRA_KEYSPACE}
+      CASSANDRA_CONSISTENCY: ${CASSANDRA_CONSISTENCY}
     depends_on:
       redis:
         condition: service_healthy
+      cassandra-init:
+        condition: service_completed_successfully
       mongo-cluster-init:
         condition: service_completed_successfully
 
@@ -238,6 +247,34 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
+  cassandra-test:
+    image: cassandra:4.1
+    ports:
+      - "${CASSANDRA_PORT}:9042"
+    environment:
+      MAX_HEAP_SIZE: 512M
+      HEAP_NEWSIZE: 128M
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'DESCRIBE KEYSPACES'"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 90s
+
+  cassandra-init:
+    image: cassandra:4.1
+    depends_on:
+      cassandra-test:
+        condition: service_healthy
+    environment:
+      CASSANDRA_HOST: cassandra-test
+      CASSANDRA_PORT: "9042"
+      CASSANDRA_KEYSPACE: ${CASSANDRA_KEYSPACE}
+    volumes:
+      - ./docker/cassandra-init.sh:/cassandra-init.sh:ro
+    command: ["bash", "/cassandra-init.sh"]
+    restart: "no"
 
 volumes:
   mongo-config-data:

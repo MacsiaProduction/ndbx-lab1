@@ -42,6 +42,11 @@ data class EventLocationJson(
     @JsonProperty("city") val city: String? = null,
 )
 
+data class EventReactionsJson(
+    @JsonProperty("likes") val likes: Int,
+    @JsonProperty("dislikes") val dislikes: Int,
+)
+
 @JsonInclude(JsonInclude.Include.NON_NULL)
 data class EventListItemJson(
     @JsonProperty("id") val id: String,
@@ -54,6 +59,7 @@ data class EventListItemJson(
     @JsonProperty("created_by") val createdBy: String,
     @JsonProperty("started_at") val startedAt: String,
     @JsonProperty("finished_at") val finishedAt: String,
+    @JsonProperty("reactions") val reactions: EventReactionsJson? = null,
 )
 
 data class EventListResponse(

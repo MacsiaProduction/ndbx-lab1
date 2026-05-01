@@ -6,6 +6,7 @@ import com.ndbx.lab2.dto.SignUpRequest
 import com.ndbx.lab2.dto.UserListResponse
 import com.ndbx.lab2.repository.UserRepository
 import com.ndbx.lab2.service.EventQueryService
+import com.ndbx.lab2.service.EventReactionService
 import com.ndbx.lab2.service.SessionService
 import com.ndbx.lab2.service.UserQueryService
 import com.ndbx.lab2.service.UserRegistrationService
@@ -13,6 +14,7 @@ import com.ndbx.lab2.service.UserRegistrationService.DuplicateUserException
 import com.ndbx.lab2.support.SearchRequestSupport.parseEventSearchCriteria
 import com.ndbx.lab2.support.SearchRequestSupport.parseUserSearchCriteria
 import com.ndbx.lab2.support.toJson
+import com.ndbx.lab2.support.wantsReactions
 import com.ndbx.lab2.web.SessionCookies
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.http.HttpStatus
@@ -31,6 +33,7 @@ class UserController(
     private val userQueryService: UserQueryService,
     private val userRepository: UserRepository,
     private val eventQueryService: EventQueryService,
+    private val eventReactionService: EventReactionService,
     private val sessionService: SessionService,
 ) {
     @PostMapping("/users")
@@ -120,6 +123,7 @@ class UserController(
         @RequestParam(name = "user", required = false) userRaw: String?,
         @RequestParam(name = "limit", required = false) limitRaw: String?,
         @RequestParam(name = "offset", required = false) offsetRaw: String?,
+        @RequestParam(name = "include", required = false) include: String?,
         @CookieValue(name = SessionController.SESSION_COOKIE, required = false) sidCookie: String?,
         response: HttpServletResponse,
     ): ResponseEntity<*> {
@@ -147,7 +151,15 @@ class UserController(
             return listQueryParamError(response, sidCookie, it)
         }
         SessionCookies.echoSession(response, sidCookie, sessionService)
-        val items = eventQueryService.findFiltered(parsed.criteria!!).map { it.toJson() }
+        val events = eventQueryService.findFiltered(parsed.criteria!!)
+        val items = if (wantsReactions(include)) {
+            val countsByTitle = events.map { it.title }.distinct().associateWith { eventTitle ->
+                eventReactionService.getReactionsForTitle(eventTitle)
+            }
+            events.map { it.toJson(countsByTitle.getValue(it.title)) }
+        } else {
+            events.map { it.toJson() }
+        }
         return ResponseEntity.ok(EventListResponse(events = items, count = items.size))
     }
 
