@@ -19,25 +19,217 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      mongo:
-        condition: service_healthy
+      mongo-cluster-init:
+        condition: service_completed_successfully
 
-  mongo:
+  configsvr:
     image: mongo:7
-    container_name: ${MONGODB_HOST}
-    ports:
-      - "${MONGODB_PORT}:${MONGODB_PORT}"
-    command: ["mongod", "--port", "${MONGODB_PORT}"]
+    command: ["mongod", "--bind_ip_all", "--configsvr", "--replSet", "cfg", "--port", "27019"]
+    volumes:
+      - mongo-config-data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--port", "${MONGODB_PORT}", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD", "mongosh", "--quiet", "--port", "27019", "--eval", "db.adminCommand('ping').ok"]
       interval: 5s
       timeout: 5s
       retries: 10
       start_period: 10s
 
+  shard1-primary:
+    image: mongo:7
+    command: ["mongod", "--bind_ip_all", "--shardsvr", "--replSet", "shard1", "--port", "27018"]
+    volumes:
+      - mongo-shard1-primary-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--port", "27018", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  shard1-secondary1:
+    image: mongo:7
+    command: ["mongod", "--bind_ip_all", "--shardsvr", "--replSet", "shard1", "--port", "27018"]
+    volumes:
+      - mongo-shard1-secondary1-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--port", "27018", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  shard1-secondary2:
+    image: mongo:7
+    command: ["mongod", "--bind_ip_all", "--shardsvr", "--replSet", "shard1", "--port", "27018"]
+    volumes:
+      - mongo-shard1-secondary2-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--port", "27018", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  shard2-primary:
+    image: mongo:7
+    command: ["mongod", "--bind_ip_all", "--shardsvr", "--replSet", "shard2", "--port", "27018"]
+    volumes:
+      - mongo-shard2-primary-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--port", "27018", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  shard2-secondary1:
+    image: mongo:7
+    command: ["mongod", "--bind_ip_all", "--shardsvr", "--replSet", "shard2", "--port", "27018"]
+    volumes:
+      - mongo-shard2-secondary1-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--port", "27018", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  shard2-secondary2:
+    image: mongo:7
+    command: ["mongod", "--bind_ip_all", "--shardsvr", "--replSet", "shard2", "--port", "27018"]
+    volumes:
+      - mongo-shard2-secondary2-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--port", "27018", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  mongo-rs-init:
+    image: mongo:7
+    depends_on:
+      configsvr:
+        condition: service_healthy
+      shard1-primary:
+        condition: service_healthy
+      shard1-secondary1:
+        condition: service_healthy
+      shard1-secondary2:
+        condition: service_healthy
+      shard2-primary:
+        condition: service_healthy
+      shard2-secondary1:
+        condition: service_healthy
+      shard2-secondary2:
+        condition: service_healthy
+    restart: "no"
+    command:
+      - bash
+      - -lc
+      - |
+        set -euo pipefail
+        ensure_replica_set() {
+          local rs_uri="$$1"
+          local rs_config="$$2"
+          mongosh --host "$$rs_uri" --quiet --eval "
+            const config = $$rs_config
+            let status
+            try {
+              status = rs.status()
+            } catch (error) {
+              status = { ok: 0 }
+            }
+            if (status.ok !== 1) {
+              try {
+                rs.initiate(config)
+              } catch (error) {
+                if (error.codeName !== 'AlreadyInitialized') {
+                  throw error
+                }
+              }
+            }
+            while (true) {
+              try {
+                const current = rs.status()
+                if (current.ok === 1 && current.members.some((member) => member.stateStr === 'PRIMARY')) {
+                  break
+                }
+              } catch (error) {
+              }
+              sleep(1000)
+            }
+          "
+        }
+        ensure_replica_set "configsvr:27019" '{
+          _id: "cfg",
+          configsvr: true,
+          members: [{ _id: 0, host: "configsvr:27019" }]
+        }'
+        ensure_replica_set "shard1-primary:27018" '{
+          _id: "shard1",
+          members: [
+            { _id: 0, host: "shard1-primary:27018" },
+            { _id: 1, host: "shard1-secondary1:27018" },
+            { _id: 2, host: "shard1-secondary2:27018" }
+          ]
+        }'
+        ensure_replica_set "shard2-primary:27018" '{
+          _id: "shard2",
+          members: [
+            { _id: 0, host: "shard2-primary:27018" },
+            { _id: 1, host: "shard2-secondary1:27018" },
+            { _id: 2, host: "shard2-secondary2:27018" }
+          ]
+        }'
+
+  mongos:
+    image: mongo:7
+    depends_on:
+      mongo-rs-init:
+        condition: service_completed_successfully
+    command: ["mongos", "--bind_ip_all", "--configdb", "cfg/configsvr:27019", "--port", "27017"]
+    ports:
+      - "${MONGODB_PORT}:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--port", "${MONGODB_PORT}", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  mongo-cluster-init:
+    image: mongo:7
+    depends_on:
+      mongos:
+        condition: service_healthy
+    restart: "no"
+    command:
+      - bash
+      - -lc
+      - |
+        set -euo pipefail
+        mongosh --host mongos:27017 --quiet --eval '
+          const shardNames = () => db.adminCommand({ listShards: 1 }).shards.map((shard) => shard._id)
+          if (!shardNames().includes("shard1")) {
+            sh.addShard("shard1/shard1-primary:27018,shard1-secondary1:27018,shard1-secondary2:27018")
+          }
+          if (!shardNames().includes("shard2")) {
+            sh.addShard("shard2/shard2-primary:27018,shard2-secondary1:27018,shard2-secondary2:27018")
+          }
+          try {
+            sh.enableSharding("eventhub")
+          } catch (error) {
+          }
+          db.getSiblingDB("eventhub").events.createIndex({ created_by: "hashed" })
+          try {
+            sh.shardCollection("eventhub.events", { created_by: "hashed" })
+          } catch (error) {
+          }
+        '
+
   redis:
     image: redis:8-alpine
-    container_name: ${REDIS_HOST}
     command: redis-server --port ${REDIS_PORT}
     ports:
       - "${REDIS_PORT}:${REDIS_PORT}"
@@ -46,3 +238,12 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
+volumes:
+  mongo-config-data:
+  mongo-shard1-primary-data:
+  mongo-shard1-secondary1-data:
+  mongo-shard1-secondary2-data:
+  mongo-shard2-primary-data:
+  mongo-shard2-secondary1-data:
+  mongo-shard2-secondary2-data:

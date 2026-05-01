@@ -48,3 +48,11 @@ jobs:
     with:
       scripts_dir: ".github/scripts"
       lab_check_dir: "autograder/cmd/lab3"
+
+  lab4:
+    needs: runtime_config
+    if: ${{ needs.runtime_config.outputs.lab >= 4 }}
+    uses: sitnikovik/ndbx/.github/workflows/reusable_eventhub_lab4.yml@main
+    with:
+      scripts_dir: ".github/scripts"
+      lab_check_dir: "autograder/cmd/lab4"

@@ -1,4 +1,4 @@
-# Лабораторная работа №3. Пользователи и события
+# Лабораторная работа №4
 
 ## Подготовка
 
@@ -8,61 +8,71 @@
 
 ## Цель работы
 
-Реализовать регистрацию пользователей и
-создание событий, на которые в дальнейшем могут подписываться пользователи,
-а для их хранения используется [MongoDB](https://www.mongodb.com/).
+Реализовать шардирование и репликацию в MongoDB для коллекции `events` и `users`,
+а также добавить новые эндпоинты для редактирования мероприятий, поиска мероприятий и организаторов.
 
 ## Задание
 
-### Регистрация пользователей
+### Редактирование мероприятий
 
-Реализуйте новый endpoint `POST /users` для создания пользователя, от лица которого,
-можно создавать события, на которые будет подписываться все желающие, в том числе, и анонимные пользователи.
+Реализуйте новый эндпоинт `PATCH /events/{id}`, позволяющий редактировать данные о мероприятии.
 
-**Запрос:**
+> 🔐 Доступ только у организатора мероприятия
 
 ```http
-POST /users HTTP/1.1
-Host:localhost:8080
-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d;
+PATCH /events/{id} HTTP/1.1
+Host: localhost:8000
 Content-Type: application/json
-Content-Length: 999
+Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d;
 ```
 
-**Тело запроса:**
+В теле запроса добавляется несколько полей:
 
-JSON-струтура пользователя (см. [ниже](#пользователь)) и пароль
+- Категория
+- Цена билета
+- Наименование города
 
 ```json
 {
-    "full_name": "Джон Доу",
-    "username": "j0hnd0e42",
-    "password": "svp4_dvp4_str0ng_passw0rd"
+    "category": "концерт",
+    "price": 1000,
+    "city": "Москва"
 }
 ```
 
-**Ответ (при успешном создании):**
+> ⚡️ Все цены передаем не в валюте, а просто в виде абстрактной единицы и только **целые числа**!
+
+- `category` *string* - категория мероприятия, добавляет/меняет в events.category в MongoDB,
+может принимать следующие значения:
+  - `meetup`
+  - `concert`
+  - `exhibition`
+  - `party`
+  - `other`
+- `price` *uint* - цена билета, добавляет/меняет в events.price в MongoDB
+- `city` *string*:
+  - при наличии значения добавляет/меняет в `events.location.city` в MongoDB
+  - при пустом значении в теле запроса - удаляет `events.location.city` в MongoDB
+
+**Ответ (при успешном обновлении):**
 
 ```http
-HTTP/1.1 201 Created
-Set-Cookie: X-Session-Id=1238a2c1d9e4b7f0a5c6d2e8b1a355dd; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
+HTTP/1.1 204 No Content
+Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
 Content-Length: 0
 ```
 
-> ⚠️ При успешной регистрации необходимо создать новую сессию и привязать её к новому пользователю,
-а идентификатор сессии должен быть возвращён в куки `X-Session-Id` в ответе
-
-**Ответ (если пользователь уже существует):**
+**Ответ (если мероприятие не найдено или пользователь не является его организатором):**
 
 ```http
-HTTP/1.1 409 Conflict
+HTTP/1.1 404 Not Found
 Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
 Content-Type: application/json
-Content-Length: 999
-{"message": "user already exists"}
+Content-Length: 81
+{"message": "Not found. Be sure that event exists and you are the organizer"}
 ```
 
-**Ответ (если данные не валидны):**
+**Ответ (если какой-то из параметров невалиден):**
 
 ```http
 HTTP/1.1 400 Bad Request
@@ -70,120 +80,6 @@ Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max
 Content-Type: application/json
 Content-Length: 999
 {"message": "invalid \"{field_name}\" field"}
-```
-
-> При 400 или 409 ошибке можно обновлять сессию если она есть, но не создавайте новую, если её нет.
-
-### Аутентификация
-
-Реализуйте новый endpoint `POST /auth/login` для аутентификации пользователя.
-
-```http
-POST /auth/login HTTP/1.1
-Host:localhost:8080
-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/;
-Content-Length: 0
-```
-
-**Тело запроса:**
-
-```json
-{
-    "username": "j0hnd0e42", // Обязательный
-    "password": "svp4_dvp4_str0ng_passw0rd" // Обязательный
-}
-```
-
-> Необходимо проверить, что `username` и `password` присутствуют в теле запроса и не являются пустой строкой.
-
-- `username` *string* - имя пользователя, по которому происходит аутентификация
-- `password` *string* - пароль, по которому происходит аутентификация
-
-**Ответ (при успешной аутентификации):**
-
-```http
-HTTP/1.1 204 No Content
-Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
-Content-Length: 0
-```
-
-> ⚠️ При успешной аутентификации необходимо привязать активную сессию из куки к этому пользователю или создать новую
-
-Добавьте в Redis в хэш-таблицу значения сессии поле `user_id` - идентификатор пользователя,
-который соответствует `_id` документа в коллекции `users` в MongoDB.
-
-**Ответ (если аутентификация не прошла):**
-
-```http
-HTTP/1.1 401 Unauthorized
-Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
-{"message": "invalid credentials"}
-```
-
-### Выход из аккаунта
-
-Реализуйте новый endpoint `POST /auth/logout` для выхода пользователя из своего аккаунта.
-Для идентификации пользователя используется сессия из куки.
-
-> ⚠️ Критически важно удалить сессию после выхода и куки `X-Session-Id` должен быть удалён (или истечь) в ответе
-
-```http
-POST /auth/logout HTTP/1.1
-Host:localhost:8080
-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d;
-Content-Length: 0
-```
-
-**Ответ (при успешном выходе):**
-
-```http
-HTTP/1.1 204 No Content
-Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age=0
-Content-Length: 0
-```
-
-> `Max-Age=0` в Set-Cookie означает, что куки должно быть удалено на стороне клиента
-
-### Создание события
-
-Реализуйте новый endpoint `POST /events` для создания события,
-на которое могут подписываться все желающие, в том числе и не авторизованные пользователи.
-Эндпоинт возвращает идентификатор созданного события,
-который соответствует `_id` документа в коллекции `events` в MongoDB.
-
-> 🔐 Доступен только для авторизованных пользователей
-
-```http
-POST /events HTTP/1.1
-Host:localhost:8080
-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d;
-Content-Length: 999
-Content-Type: application/json
-```
-
-**Тело запроса:**
-
-```json
-{
-    "title": "Мой день рождения", // Обязательный
-    "address": "г. Санкт-Петербург, ул. Пушкина, дом Колотушкина", // Обязательный
-    "started_at": "2026-04-01T12:00:00+03:00", // Обязательный
-    "finished_at": "2026-04-01T23:00:00+03:00", // Обязательный
-    "description": "Приглашаю вас отпраздновать мое 30-с-чем-то-летие",
-}
-```
-
-> ⚠️ К **каждому** документу MongoDB для созданного того или иного события
-> должен присваиваться идентификатор авторизованного пользователя! (см. [схему](#событие))
-
-**Ответ (при успешной создании):**
-
-```http
-HTTP/1.1 201 Created
-Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
-Content-Length: 999
-Content-Type: application/json
-{"id": "12e9c0b1a2b3c3d5e6f7a8b7"}
 ```
 
 **Ответ (если пользователь не авторизован):**
@@ -194,43 +90,34 @@ Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max
 Content-Length: 0
 ```
 
-**Ответ (если параметры невалидны):**
+### Поиск мероприятий
+
+Доработайте существующий эндпоинт `GET /events`, возвращающий список мероприятий, отвечающий параметрам поиска.
 
 ```http
-HTTP/1.1 400 Bad Request
-Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
-Content-Type: application/json
-Content-Length: 999
-{"message": "invalid \"{field_name}\" field"}
-```
-
-> ⚠️ Возвращайте ошибку, если какой-то из не валиден
-
-**Ответ (если событие уже создано):**
-
-```http
-HTTP/1.1 409 Conflict
-Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
-Content-Type: application/json
-Content-Length: 999
-{"message": "event already exists"}
-```
-
-### Просмотр событий
-
-Реализуйте новый endpoint `GET /events` для просмотра всех событий с возможностью фильтрации и пагинации.
-
-```http
-GET /events?title=my_supa_party&limit=10&offset=10 HTTP/1.1
-Host:localhost:8080
+GET /events?category=party&city=Москва&price_to=0&started_date_from=20260314 HTTP/1.1
+Host: localhost:8000
 Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d
 ```
 
 Параметры фильтрации задаются через **GET-параметры**:
 
-- `title` *string* - название события или подстрока, входящее в название события (по аналоги c `LIKE` в SQL)
-- `limit` *uint* - `(>= 0)` максимально количество событий в выборке (участвует в пагинации)
-- `offset` *uint* - `(>= 0)` кол-во событий, которое нужно пропустить (участвует в пагинации)
+- Все параметры из [предыдущей лабораторной работы](../03/README.md#просмотр-событий)
+- `id` *string* - id мероприятия (поиск по точному совпадению)
+- `category` *string* - категория мероприятия
+  - `meetup`
+  - `concert`
+  - `exhibition`
+  - `party`
+  - `other`
+- `price_from` *uint* - минимальная цена билета включительно
+- `price_to` *uint* - максимальная цена билета включительно
+- `city` *string* - город проведения мероприятия
+- `date_from` *string* - дата начала мероприятия не раньше этого значения (формат YYYYMMDD, например 20260314)
+- `date_to` *string* - дата начала мероприятия не позже этого значения (формат YYYYMMDD, например 20260314)
+- `user` *string* - никнейм пользователя, который создал мероприятие (поиск по точному совпадению)
+
+> 💡 Чтобы отобразить только бесплатные встречи - достаточно передать `price_to=0`
 
 **Ответ (события найдены):**
 
@@ -238,7 +125,7 @@ Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d
 HTTP/1.1 200 ОК
 Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
 Content-Type: application/json
-Content-Length: 999
+Content-Length: 759
 ```
 
 ```json
@@ -247,9 +134,12 @@ Content-Length: 999
         {
             "id": "12e9c0b1a2b3c3d5e6f7a8b7",
             "title": "Мой день рождения",
+            "category": "party",
+            "price": 0,
             "description": "Приглашаю вас отпраздновать мое 30-с-чем-то-летие",
             "location": {
-                "address": "г. Санкт-Петербург, ул. Пушкина, дом Колотушкина"
+                "city": "Москва",
+                "address": "г. Москва, ул. Пушкина, дом Колотушкина"
             },
             "created_at": "2026-03-14T14:59:32+03:00",
             "created_by": "65e9c0b1a2b3c4d5e6f7a8b9",
@@ -270,7 +160,7 @@ Content-Length: 999
 HTTP/1.1 200 ОК
 Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
 Content-Type: application/json
-Content-Length: 999
+Content-Length: 38
 ```
 
 ```json
@@ -287,52 +177,47 @@ HTTP/1.1 400 Bad Request
 Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
 Content-Length: 999
 Content-Type: application/json
-{"message": "invalid \"{field_name}\" parameter"}
+{"message": "invalid \"{field_name}\" field"}
 ```
 
-### Пользователь
+### Мероприятие
 
-**Коллекция:** `users`
+Реализуйте новый эндпоинт `GET /events/{id}` возвращающий подробные данные о событии или мероприятии.
 
-**Схема:**
+```http
+GET /events/12e9c0b1a2b3c3d5e6f7a8b7 HTTP/1.1
+Host: localhost:8000
+Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d
+```
+
+**Ответ (мероприятие найдено):**
+
+```http
+HTTP/1.1 200 ОК
+Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
+Content-Type: application/json
+Content-Length: 591
+```
 
 ```json
 {
-    "full_name": "Джон Доу",
-    "username": "j0hnd0e42",
-    "password_hash": "$2a$10$Xr0DDNUTfpbLihAp0ZbGPei1oFP8g5FNypIvaXdW7W.KWJaobPA5q"
-}
-```
-
-> ⚠️ Храните именно **хэш пароля** по алгоритму **bcrypt** вместо самого пароля, по которому авторизуется пользователь!
-
-**Индексы:**
-
-*Ожидается, как минимум, один индекс:*
-
-- `username` *unique* - уникальный индекс по юзернеймам пользователей, по которому происходит аутентификация
-
-### Событие
-
-**Коллекция:** `events`
-
-**Схема:**
-
-```json
-{
+    "id": "12e9c0b1a2b3c3d5e6f7a8b7",
     "title": "Мой день рождения",
+    "category": "party",
+    "price": 0,
     "description": "Приглашаю вас отпраздновать мое 30-с-чем-то-летие",
     "location": {
-        "address": "г. Санкт-Петербург, ул. Пушкина, дом Колотушкина"
+        "city": "Москва",
+        "address": "г. Москва, ул. Пушкина, дом Колотушкина"
     },
     "created_at": "2026-03-14T14:59:32+03:00",
-    "created_by": "65e9c0b1a2b3c4d5e6f7a8b9", // hex из id пользователя, который создал событие (авторизованный)
+    "created_by": "65e9c0b1a2b3c4d5e6f7a8b9",
     "started_at": "2026-04-01T12:00:00+03:00",
     "finished_at": "2026-04-01T23:00:00+03:00",
 }
 ```
 
-> ⚠️ Все даты храним только в строке формата RFC3339 с часовым поясом (может быть любым)
+**Ответ (мероприятие НЕ найдено):**
 
 **Индексы:**
 
@@ -360,40 +245,236 @@ MONGODB_HOST=your_mongodb_container_name
 MONGODB_PORT=your_mongodb_container_port
 ```
 
-> ⚠️ Для тестов рекомендуется оставить `APP_USER_SESSION_TTL` небольшим, чтобы ускорить проверку истечения сессии,
-как это требовалось в [предыдущей лабораторной работе](/docs/lab/02/)
+### Поиск организаторов
+
+Реализуйте новый эндпоинт `GET /users`, возвращающий список организаторов, отвечающий параметрам поиска.
+
+```http
+GET /users?name=Иван HTTP/1.1
+Host: localhost:8000
+Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d
+```
+
+Параметры фильтрации задаются через **GET-параметры**:
+
+- `limit` *uint* - `(>= 0)` максимально количество в выборке (участвует в пагинации)
+- `offset` *uint* - `(>= 0)` кол-во, которое нужно пропустить (участвует в пагинации)
+- `name` *string* - имя организатора (поиск по вхождению, например "Иван" найдет "Иван Иванов", "Петр Иванов" и "Иван Петров")
+- `id` *string* - id организатора (поиск по точному совпадению)
+
+**Ответ (организаторы найдены):**
+
+```http
+HTTP/1.1 200 ОК
+Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
+Content-Type: application/json
+Content-Length: 203
+```
+
+```json
+{
+    "users": [
+        {
+            "id": "65e9c0b1a2b3c4d5e6f7a8b9",
+            "full_name": "Иван Иванов",
+            "username": "ivan_ivanov",
+        }
+    ],
+    "count": 1
+}
+```
+
+> ⚠️ Не возвращайте `password_hash`!
+
+**Ответ (организаторы не найдены):**
+
+```http
+HTTP/1.1 200 ОК
+Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
+Content-Type: application/json
+Content-Length: 37
+```
+
+```json
+{
+    "users": [],
+    "count": 0
+}
+```
+
+**Ответ (если параметры невалидны):**
+
+```http
+HTTP/1.1 400 Bad Request
+Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
+Content-Length: 999
+Content-Type: application/json
+{"message": "invalid \"{field_name}\" field"}
+```
+
+### Карточка организатора
+
+Реализуйте новый эндпоинт `GET /users/{id}`, возвращающий подробные данные об организаторе мероприятий.
+
+```http
+GET /users/65e9c0b1a2b3c4d5e6f7a8b9 HTTP/1.1
+Host: localhost:8000
+Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d
+```
+
+**Ответ (организатор найден):**
+
+```http
+HTTP/1.1 200 ОК
+Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
+Content-Type: application/json
+Content-Length: 117
+```
+
+```json
+{
+    "id": "65e9c0b1a2b3c4d5e6f7a8b9",
+    "full_name": "Иван Иванов",
+    "username": "ivan_ivanov",
+}
+```
+
+> ⚠️ Не возвращайте `password_hash`!
+
+**Ответ (организатор НЕ найден):**
+
+```http
+HTTP/1.1 404 Not Found
+Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f97d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
+Content-Length: 24
+{"message": "Not found"}
+Content-Length: 0
+```
+
+### Мероприятия конкретного организатора
+
+Реализуйте новый эндпоинт `GET /users/{id}/events`, возвращающий список мероприятий по конкретному организатору
+
+```http
+GET /users/65e9c0b1a2b3c4d5e6f7a8b9/events HTTP/1.1
+Host: localhost:8000
+Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d
+```
+
+**Ответ (мероприятия найдены):**
+
+```http
+HTTP/1.1 200 ОК
+Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f97d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
+Content-Type: application/json
+Content-Length: 760
+```
+
+```json
+{
+    "events": [
+        {
+            "id": "12e9c0b1a2b3c3d5e6f7a8b7",
+            "title": "Мой день рождения",
+            "category": "party",
+            "price": 0,
+            "description": "Приглашаю вас отпраздновать мое 30-с-чем-то-летие",
+            "location": {
+                "city": "Москва",
+                "address": "г. Москва, ул. Пушкина, дом Колотушкина"
+            },
+            "created_at": "2026-03-14T14:59:32+03:00",
+            "created_by": "65e9c0b1a2b3c4d5e6f7a8b9",
+            "started_at": "2026-04-01T12:00:00+03:00",
+            "finished_at": "2026-04-01T23:00:00+03:00",
+        }, 
+    ],
+    "count": 1
+}
+```
+
+**Ответ (мероприятия НЕ найдены):**
+
+```http
+HTTP/1.1 200 ОК
+Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f97d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
+Content-Type: application/json
+Content-Length: 38
+```
+
+```json
+{
+    "events": [],
+    "count": 0
+}
+```
+
+**Ответ (пользователь не найден):**
+
+```http
+HTTP/1.1 404 Not Found
+Set-Cookie: X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f97d; HttpOnly; Path=/; Max-Age={APP_USER_SESSION_TTL}
+Content-Type: application/json
+Content-Length: 29
+{"message": "User not found"}
+```
+
+### Шардирование
+
+Реализуйте шардирование коллекции `events` по хэш-ключу `created_by` (id пользователя, который создал мероприятие).
+
+Коллекцию `users` можно не шардировать, достаточно репликации.
+
+### Репликация
+
+Реализуйте репликацию с помощью Replica Set в MongoDB.
+
+Для каждого шарда должен быть:
+
+- 1 primary-нода
+- 2 secondary-ноды
+
+> ⚠️ На каждой ноде должен быть запущен отдельный экземпляр MongoDB,
+с разными портами и разными директориями для хранения данных!
 
 ## FAQ
 
-**Q: Когда обновляется сессия?**  
-A: На каждом POST-запросе. GET запросы только возвращают существующую сессию.
+**Q: Зачем нужно шардирование, если у нас не так много данных?**  
+**A:** Шардирование необходимо для масштабирования базы данных и обеспечения высокой доступности.
+Даже если у нас сейчас всего 1000 мероприятий, в будущем их количество может значительно вырасти,
+и шардирование позволит эффективно распределять нагрузку между несколькими серверами.
 
-**Q: Что произойдет когда истечет сессия?**  
-A: Авторизация должна "слететь" и пользователь не сможет создать события, пока не авторизуется заново.
-При этом, он может просмотривать события через `GET /events`.
+**Q: Нужно ли использовать Kubernetes?**  
+**A:** Нет, для этой лабораторной работы достаточно запустить несколько экземпляров MongoDB в docker-контейнерах.
+Главное - обеспечить правильную конфигурацию для шардирования и репликации.
 
-**Q: Откуда берется поле id в `GET /events?`**  
-A: Поле `id` в ответе `GET /events` соответствует `_id` документа в коллекции `events` в MongoDB.
+**Q: Как проверить, что шардирование и репликация работают правильно?**  
+**A:** Вы можете использовать MongoDB Shell или MongoDB Compass или другие инструмент
+для проверки состояния шардирования и репликации.
+Для шардирования проверьте, что коллекция `events` распределена между несколькими шардами.
+Для репликации проверьте, что у вас есть одна primary-нода и две secondary-ноды, и что данные реплицируются между ними.
 
-**Q: MongoDB позволяет хранить "что угодно". Можно ли поменять схему?**  
-A: Можете дополнять, но менять формат данных или названия полей нельзя, так как это сломает АТ.
+**Q: Какие значения считаются валидными для поля category?**  
+**A:** Валидными значениями для поля `category` являются только те, которые указаны в условии задачи.
+Любое другое значение будет считаться невалидным и должно приводить к ошибке 400 Bad Request.
 
-**Q: Можно делать больше индексов чем требуется?**  
-A: Еще успеете 😉
+**Q: Что делать, если в `PATCH /events/{id}` передано поле, которого нет в спецификации**  
+**A:** Игнорировать это поле и не возвращать ошибку. Обновлять только те поля, которые указаны в спецификации.
 
-**Q: Нужно ли реализовывать удаление и изменение событий?**  
-A: Не обязательно. Это будет в следующей лабораторной работе.
+**Q: Как обрабатывать пустую строку в поле city в `PATCH /events/{id}`?**  
+**A:** Если в поле `city` передана пустая строка, это означает,
+что нужно удалить `events.location.city` в MongoDB для данного мероприятия.
 
-**Q: Могу ли я использовать camelCase в названиях полей документов и в запросах?**  
-A: Нет. Только snake_case, иначе ваша работа не пройдет АТ.
+**Q: Как проверить, что пользователь — организатор мероприятия?**  
+**A:** Для проверки, что пользователь является организатором мероприятия,
+нужно сравнить `created_by` мероприятия с `id` пользователя, который делает запрос.
+Если они совпадают, значит пользователь является организатором и имеет право редактировать мероприятие.
+Если нет, то нужно вернуть ошибку 404 Not Found
+или 401 Unauthorized, в зависимости от того, авторизован ли пользователь или нет.
 
-**Q: Что на счет `POST /session` из [предыдущей лабораторной](/docs/lab/02/)?**  
-A: Ничего. В рамках этого задания этот эндпоинт не используется.
-
-**Q: Кто угодно может регистрировать пользователей?**  
-A: В нашем проекте - да, но для регистрации необходима сессия.
-Мы опускаем момент с верификацией, двухфакторной аутентификацией и прочими принципами защиты от злоумышленников,
-так как это академический проект и не претендует на звание самого безопасного проекта в мире 😉
-
-**Q: Можно не использовать логин/пароль для MongoDB?**  
-A: Можно. Но, лучше не надо.
+**Q: Как проверить, что пользователь — организатор мероприятия?**  
+**A:** Для проверки, что пользователь является организатором мероприятия,
+нужно сравнить `created_by` мероприятия с `id` пользователя, который делает запрос.
+Если они совпадают, значит пользователь является организатором и имеет право редактировать мероприятие.
+Если нет, то нужно вернуть ошибку 404 Not Found
+или 401 Unauthorized, в зависимости от того, авторизован ли пользователь или нет.
