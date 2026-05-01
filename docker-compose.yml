@@ -192,7 +192,7 @@ services:
     ports:
       - "${MONGODB_PORT}:27017"
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--port", "27017", "--eval", "db.adminCommand('ping').ok"]
+      test: ["CMD", "mongosh", "--quiet", "--port", "${MONGODB_PORT}", "--eval", "db.adminCommand('ping').ok"]
       interval: 5s
       timeout: 5s
       retries: 10
