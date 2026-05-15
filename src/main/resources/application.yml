@@ -12,6 +12,16 @@ spring:
 app:
   session:
     ttl: ${APP_USER_SESSION_TTL:3600}
+  reactions:
+    ttl: ${APP_LIKE_TTL:60}
+  cassandra:
+    hosts: ${CASSANDRA_HOSTS:localhost}
+    port: ${CASSANDRA_PORT:9042}
+    username: ${CASSANDRA_USERNAME:}
+    password: ${CASSANDRA_PASSWORD:}
+    keyspace: ${CASSANDRA_KEYSPACE:testkeyspace}
+    consistency: ${CASSANDRA_CONSISTENCY:ONE}
+    local-datacenter: datacenter1
   mongodb:
     database: ${MONGODB_EVENTHUB_DATABASE:${MONGODB_DATABASE:eventhub}}
     user: ${MONGODB_USER:}

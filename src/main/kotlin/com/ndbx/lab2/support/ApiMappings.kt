@@ -4,9 +4,10 @@ import com.ndbx.lab2.document.EventDocument
 import com.ndbx.lab2.document.UserDocument
 import com.ndbx.lab2.dto.EventListItemJson
 import com.ndbx.lab2.dto.EventLocationJson
+import com.ndbx.lab2.dto.EventReactionsJson
 import com.ndbx.lab2.dto.UserJson
 
-fun EventDocument.toJson() = EventListItemJson(
+fun EventDocument.toJson(reactions: EventReactionsJson? = null) = EventListItemJson(
     id = id!!,
     title = title,
     category = category,
@@ -20,6 +21,7 @@ fun EventDocument.toJson() = EventListItemJson(
     createdBy = createdBy,
     startedAt = startedAt,
     finishedAt = finishedAt,
+    reactions = reactions,
 )
 
 fun UserDocument.toJson() = UserJson(
