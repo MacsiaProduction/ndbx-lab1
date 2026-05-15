@@ -1,15 +1,9 @@
 package com.ndbx.lab2.service
 
 import com.ndbx.lab2.config.AppSessionProperties
-import io.lettuce.core.codec.ByteArrayCodec
-import io.lettuce.core.output.IntegerOutput
-import org.springframework.data.redis.connection.DecoratedRedisConnection
-import org.springframework.data.redis.connection.RedisConnection
-import org.springframework.data.redis.connection.lettuce.LettuceConnection
-import org.springframework.data.redis.core.RedisCallback
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Service
-import java.nio.charset.StandardCharsets
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 
@@ -35,19 +29,17 @@ class SessionService(
 
     fun createSession(sid: String): Boolean {
         val key = key(sid)
+        if (sessionExists(sid)) return false
         val now = Instant.now().toString()
-        val ttl = sessionProperties.ttl.toString()
-        val reply = redisTemplate.execute(RedisCallback { conn: RedisConnection ->
-            hsetex(
-                conn,
-                utf8(key), utf8("FNX"),
-                utf8("EX"), utf8(ttl),
-                utf8("FIELDS"), utf8("2"),
-                utf8(CREATED_AT_FIELD), utf8(now),
-                utf8(UPDATED_AT_FIELD), utf8(now),
-            )
-        })
-        return hsetexOk(reply)
+        redisTemplate.opsForHash<String, String>().putAll(
+            key,
+            mapOf(
+                CREATED_AT_FIELD to now,
+                UPDATED_AT_FIELD to now,
+            ),
+        )
+        redisTemplate.expire(key, ttlDuration())
+        return true
     }
 
     fun createUniqueSession(): String {
@@ -62,55 +54,44 @@ class SessionService(
         repeat(5) {
             val sid = generateSid()
             val k = key(sid)
+            if (sessionExists(sid)) return@repeat
             val now = Instant.now().toString()
-            val ttl = sessionProperties.ttl.toString()
-            val reply = redisTemplate.execute(RedisCallback { conn: RedisConnection ->
-                hsetex(
-                    conn,
-                    utf8(k), utf8("FNX"),
-                    utf8("EX"), utf8(ttl),
-                    utf8("FIELDS"), utf8("3"),
-                    utf8(CREATED_AT_FIELD), utf8(now),
-                    utf8(UPDATED_AT_FIELD), utf8(now),
-                    utf8(USER_ID_FIELD), utf8(userId),
-                )
-            })
-            if (hsetexOk(reply)) return sid
+            redisTemplate.opsForHash<String, String>().putAll(
+                k,
+                mapOf(
+                    CREATED_AT_FIELD to now,
+                    UPDATED_AT_FIELD to now,
+                    USER_ID_FIELD to userId,
+                ),
+            )
+            redisTemplate.expire(k, ttlDuration())
+            return sid
         }
         error("Failed to generate a unique session id after retries")
     }
 
     fun bindUserToSession(sid: String, userId: String): Boolean {
+        if (!sessionExists(sid)) return false
         val k = key(sid)
         val now = Instant.now().toString()
-        val ttl = sessionProperties.ttl.toString()
-        val reply = redisTemplate.execute(RedisCallback { conn: RedisConnection ->
-            hsetex(
-                conn,
-                utf8(k), utf8("FXX"),
-                utf8("EX"), utf8(ttl),
-                utf8("FIELDS"), utf8("2"),
-                utf8(USER_ID_FIELD), utf8(userId),
-                utf8(UPDATED_AT_FIELD), utf8(now),
-            )
-        })
-        return hsetexOk(reply)
+        redisTemplate.opsForHash<String, String>().putAll(
+            k,
+            mapOf(
+                USER_ID_FIELD to userId,
+                UPDATED_AT_FIELD to now,
+            ),
+        )
+        redisTemplate.expire(k, ttlDuration())
+        return true
     }
 
     fun touchSession(sid: String): Boolean {
+        if (!sessionExists(sid)) return false
         val k = key(sid)
         val now = Instant.now().toString()
-        val ttl = sessionProperties.ttl.toString()
-        val reply = redisTemplate.execute(RedisCallback { conn: RedisConnection ->
-            hsetex(
-                conn,
-                utf8(k), utf8("FXX"),
-                utf8("EX"), utf8(ttl),
-                utf8("FIELDS"), utf8("1"),
-                utf8(UPDATED_AT_FIELD), utf8(now),
-            )
-        })
-        return hsetexOk(reply)
+        redisTemplate.opsForHash<String, String>().put(key(sid), UPDATED_AT_FIELD, now)
+        redisTemplate.expire(k, ttlDuration())
+        return true
     }
 
     fun sessionExists(sid: String): Boolean =
@@ -128,16 +109,5 @@ class SessionService(
 
     private fun key(sid: String) = "$SESSION_PREFIX$sid"
 
-    private fun utf8(s: String) = s.toByteArray(StandardCharsets.UTF_8)
-
-    private fun hsetex(conn: RedisConnection, vararg args: ByteArray): Any? {
-        val raw = when (conn) {
-            is DecoratedRedisConnection -> conn.delegate
-            else -> conn
-        }
-        check(raw is LettuceConnection) { "Ожидается Lettuce; для другого драйвера нужен свой вызов HSETEX" }
-        return raw.execute("HSETEX", IntegerOutput(ByteArrayCodec.INSTANCE), *args)
-    }
-
-    private fun hsetexOk(reply: Any?) = (reply as? Number)?.toLong() == 1L
+    private fun ttlDuration() = Duration.ofSeconds(sessionProperties.ttl)
 }

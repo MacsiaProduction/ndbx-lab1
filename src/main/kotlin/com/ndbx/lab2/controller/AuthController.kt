@@ -40,12 +40,13 @@ class AuthController(
         val username = req.username!!.trim()
         val password = req.password!!
         val user = userRepository.findByUsername(username)
-        if (user == null || !passwordEncoder.matches(password, user.passwordHash)) {
+        val passwordMatches = user?.passwordHash?.let { passwordEncoder.matches(password, it) } == true
+        if (user == null || !passwordMatches) {
             SessionCookies.refreshSession(response, sidCookie, sessionService)
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(MessageResponse("invalid credentials"))
         }
-        val userIdHex = user.id!!.toHexString()
+        val userIdHex = user.id!!
         if (effectiveSessionId != null) {
             if (!sessionService.bindUserToSession(effectiveSessionId, userIdHex)) {
                 val sid = sessionService.createSessionWithUser(userIdHex)
