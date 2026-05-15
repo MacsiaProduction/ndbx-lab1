@@ -7,6 +7,7 @@ import com.ndbx.lab2.dto.UserListResponse
 import com.ndbx.lab2.repository.UserRepository
 import com.ndbx.lab2.service.EventQueryService
 import com.ndbx.lab2.service.EventReactionService
+import com.ndbx.lab2.service.EventReviewService
 import com.ndbx.lab2.service.SessionService
 import com.ndbx.lab2.service.UserQueryService
 import com.ndbx.lab2.service.UserRegistrationService
@@ -15,6 +16,7 @@ import com.ndbx.lab2.support.SearchRequestSupport.parseEventSearchCriteria
 import com.ndbx.lab2.support.SearchRequestSupport.parseUserSearchCriteria
 import com.ndbx.lab2.support.toJson
 import com.ndbx.lab2.support.wantsReactions
+import com.ndbx.lab2.support.wantsReviews
 import com.ndbx.lab2.web.SessionCookies
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.http.HttpStatus
@@ -34,6 +36,7 @@ class UserController(
     private val userRepository: UserRepository,
     private val eventQueryService: EventQueryService,
     private val eventReactionService: EventReactionService,
+    private val eventReviewService: EventReviewService,
     private val sessionService: SessionService,
 ) {
     @PostMapping("/users")
@@ -152,13 +155,22 @@ class UserController(
         }
         SessionCookies.echoSession(response, sidCookie, sessionService)
         val events = eventQueryService.findFiltered(parsed.criteria!!)
-        val items = if (wantsReactions(include)) {
-            val countsByTitle = events.map { it.title }.distinct().associateWith { eventTitle ->
-                eventReactionService.getReactionsForTitle(eventTitle)
-            }
-            events.map { it.toJson(countsByTitle.getValue(it.title)) }
+        val titles = events.map { it.title }.distinct()
+        val reactionsByTitle = if (wantsReactions(include)) {
+            titles.associateWith { eventReactionService.getReactionsForTitle(it) }
         } else {
-            events.map { it.toJson() }
+            null
+        }
+        val reviewsByTitle = if (wantsReviews(include)) {
+            titles.associateWith { eventReviewService.getReviewsAggregateForTitle(it) }
+        } else {
+            null
+        }
+        val items = events.map { e ->
+            e.toJson(
+                reactions = reactionsByTitle?.get(e.title),
+                reviews = reviewsByTitle?.get(e.title),
+            )
         }
         return ResponseEntity.ok(EventListResponse(events = items, count = items.size))
     }
