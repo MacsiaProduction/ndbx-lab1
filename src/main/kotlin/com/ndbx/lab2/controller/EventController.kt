@@ -9,12 +9,14 @@ import com.ndbx.lab2.dto.MessageResponse
 import com.ndbx.lab2.dto.UpdateEventRequest
 import com.ndbx.lab2.repository.EventRepository
 import com.ndbx.lab2.service.EventCommandService
-import com.ndbx.lab2.service.EventUpdateCommand
 import com.ndbx.lab2.service.EventQueryService
+import com.ndbx.lab2.service.EventReactionService
+import com.ndbx.lab2.service.EventUpdateCommand
 import com.ndbx.lab2.service.SessionService
 import com.ndbx.lab2.support.RequestSupport
 import com.ndbx.lab2.support.SearchRequestSupport.parseEventSearchCriteria
 import com.ndbx.lab2.support.toJson
+import com.ndbx.lab2.support.wantsReactions
 import com.ndbx.lab2.web.SessionCookies
 import jakarta.servlet.http.HttpServletResponse
 import org.springframework.dao.DuplicateKeyException
@@ -36,6 +38,7 @@ class EventController(
     private val eventRepository: EventRepository,
     private val eventCommandService: EventCommandService,
     private val eventQueryService: EventQueryService,
+    private val eventReactionService: EventReactionService,
     private val sessionService: SessionService,
 ) {
     @PostMapping("/events")
@@ -102,6 +105,7 @@ class EventController(
         @RequestParam(name = "user", required = false) userRaw: String?,
         @RequestParam(name = "limit", required = false) limitRaw: String?,
         @RequestParam(name = "offset", required = false) offsetRaw: String?,
+        @RequestParam(name = "include", required = false) include: String?,
         @CookieValue(name = SessionController.SESSION_COOKIE, required = false) sidCookie: String?,
         response: HttpServletResponse,
     ): ResponseEntity<*> {
@@ -124,13 +128,22 @@ class EventController(
             return listQueryParamError(response, sidCookie, it)
         }
         SessionCookies.echoSession(response, sidCookie, sessionService)
-        val items = eventQueryService.findFiltered(parsed.criteria!!).map(EventDocument::toJson)
+        val events = eventQueryService.findFiltered(parsed.criteria!!)
+        val items = if (wantsReactions(include)) {
+            val countsByTitle = events.map { it.title }.distinct().associateWith { eventTitle ->
+                eventReactionService.getReactionsForTitle(eventTitle)
+            }
+            events.map { it.toJson(countsByTitle.getValue(it.title)) }
+        } else {
+            events.map(EventDocument::toJson)
+        }
         return ResponseEntity.ok(EventListResponse(events = items, count = items.size))
     }
 
     @GetMapping("/events/{id}")
     fun getOne(
         @PathVariable id: String,
+        @RequestParam(name = "include", required = false) include: String?,
         @CookieValue(name = SessionController.SESSION_COOKIE, required = false) sidCookie: String?,
         response: HttpServletResponse,
     ): ResponseEntity<*> {
@@ -138,7 +151,58 @@ class EventController(
         val event = eventRepository.findById(id).orElse(null)
             ?: return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(MessageResponse("Not found"))
-        return ResponseEntity.ok(event.toJson())
+        val reactions = if (wantsReactions(include)) {
+            eventReactionService.getReactionsForTitle(event.title)
+        } else {
+            null
+        }
+        return ResponseEntity.ok(event.toJson(reactions))
+    }
+
+    @PostMapping("/events/{id}/like")
+    fun like(
+        @PathVariable id: String,
+        @CookieValue(name = SessionController.SESSION_COOKIE, required = false) sidCookie: String?,
+        response: HttpServletResponse,
+    ): ResponseEntity<*> {
+        val sid = sessionService.resolveSession(sidCookie)
+        val userId = sid?.let(sessionService::getUserId)
+        if (sid == null || userId == null) {
+            SessionCookies.refreshSession(response, sidCookie, sessionService)
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build<Void>()
+        }
+        val event = eventRepository.findById(id).orElse(null)
+        if (event == null) {
+            touchSession(response, sid)
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(MessageResponse("Event not found"))
+        }
+        eventReactionService.likeEvent(id, userId, event.title)
+        touchSession(response, sid)
+        return ResponseEntity.noContent().build<Void>()
+    }
+
+    @PostMapping("/events/{id}/dislike")
+    fun dislike(
+        @PathVariable id: String,
+        @CookieValue(name = SessionController.SESSION_COOKIE, required = false) sidCookie: String?,
+        response: HttpServletResponse,
+    ): ResponseEntity<*> {
+        val sid = sessionService.resolveSession(sidCookie)
+        val userId = sid?.let(sessionService::getUserId)
+        if (sid == null || userId == null) {
+            SessionCookies.refreshSession(response, sidCookie, sessionService)
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build<Void>()
+        }
+        val event = eventRepository.findById(id).orElse(null)
+        if (event == null) {
+            touchSession(response, sid)
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(MessageResponse("Event not found"))
+        }
+        eventReactionService.dislikeEvent(id, userId, event.title)
+        touchSession(response, sid)
+        return ResponseEntity.noContent().build<Void>()
     }
 
     @PatchMapping("/events/{id}")
