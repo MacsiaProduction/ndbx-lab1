@@ -47,6 +47,41 @@ data class EventReactionsJson(
     @JsonProperty("dislikes") val dislikes: Int,
 )
 
+data class EventReviewsJson(
+    @JsonProperty("count") val count: Int,
+    @JsonProperty("rating") val rating: Double,
+)
+
+data class CreateReviewRequest(
+    @JsonProperty("comment") val comment: String?,
+    @JsonProperty("rating") val rating: Int?,
+)
+
+data class CreateReviewResponse(
+    @JsonProperty("id") val id: String,
+)
+
+data class UpdateReviewRequest(
+    @JsonProperty("comment") val comment: String?,
+    @JsonProperty("rating") val rating: Int?,
+)
+
+@JsonInclude(JsonInclude.Include.NON_NULL)
+data class ReviewListItemJson(
+    @JsonProperty("id") val id: String,
+    @JsonProperty("event_id") val eventId: String,
+    @JsonProperty("comment") val comment: String,
+    @JsonProperty("created_at") val createdAt: String,
+    @JsonProperty("created_by") val createdBy: String,
+    @JsonProperty("rating") val rating: Int,
+    @JsonProperty("updated_at") val updatedAt: String,
+)
+
+data class ReviewListResponse(
+    @JsonProperty("reviews") val reviews: List<ReviewListItemJson>,
+    @JsonProperty("count") val count: Int,
+)
+
 @JsonInclude(JsonInclude.Include.NON_NULL)
 data class EventListItemJson(
     @JsonProperty("id") val id: String,
@@ -60,6 +95,7 @@ data class EventListItemJson(
     @JsonProperty("started_at") val startedAt: String,
     @JsonProperty("finished_at") val finishedAt: String,
     @JsonProperty("reactions") val reactions: EventReactionsJson? = null,
+    @JsonProperty("reviews") val reviews: EventReviewsJson? = null,
 )
 
 data class EventListResponse(
