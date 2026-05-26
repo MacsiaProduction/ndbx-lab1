@@ -23,6 +23,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-data-mongodb")
     implementation("com.datastax.oss:java-driver-core:4.17.0")
+    implementation("org.neo4j.driver:neo4j-java-driver")
     implementation("org.springframework.security:spring-security-crypto")
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
     implementation("org.jetbrains.kotlin:kotlin-reflect")
