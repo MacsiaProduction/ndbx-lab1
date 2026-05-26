@@ -4,7 +4,6 @@ import com.datastax.oss.driver.api.core.CqlSession
 import com.ndbx.lab2.config.AppReactionProperties
 import com.ndbx.lab2.dto.EventReactionsJson
 import com.ndbx.lab2.repository.EventRepository
-import com.ndbx.lab2.repository.RecommendationGraphRepository
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Service
 import java.nio.charset.StandardCharsets
@@ -18,7 +17,6 @@ class EventReactionService(
     private val eventRepository: EventRepository,
     private val redisTemplate: StringRedisTemplate,
     private val reactionProperties: AppReactionProperties,
-    private val recommendationGraphRepository: RecommendationGraphRepository,
 ) {
 
     private val insertPrepared by lazy {
@@ -40,7 +38,6 @@ class EventReactionService(
 
     fun likeEvent(eventId: String, userId: String, eventTitle: String) {
         upsertReaction(eventId, userId, LIKE_VALUE, eventTitle)
-        recommendationGraphRepository.recordLike(userId, eventId, eventTitle)
     }
 
     fun dislikeEvent(eventId: String, userId: String, eventTitle: String) {
