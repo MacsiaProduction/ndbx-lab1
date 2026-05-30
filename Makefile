@@ -1,26 +1,37 @@
-.DEFAULT_GOAL = run
+ENV_FILE = .env.local
+DC = docker compose --env-file $(ENV_FILE)
 
-# Runs all services in detached mode.
+.DEFAULT_GOAL = help
+
+.PHONY: help
+help:
+	@echo "run      — запустить все сервисы в фоне"
+	@echo "rund     — запустить в foreground (вывод в терминал)"
+	@echo "stop     — остановить сервисы"
+	@echo "clean    — остановить сервисы и удалить volumes"
+	@echo "logs     — вывод логов (Ctrl+C для выхода)"
+	@echo "services — статус запущенных контейнеров"
+
 .PHONY: run
 run:
-	docker compose --env-file .env.local up -d --build
+	$(DC) up -d --build
 
-# Runs all services without detached mode (for debugging).
 .PHONY: rund
 rund:
-	docker compose --env-file .env.local up --build
+	$(DC) up --build
 
-# Shows all service statuses.
-.PHONY: services
-services:
-	docker compose ps
-
-# Stops all running services.
 .PHONY: stop
 stop:
-	docker compose down
+	$(DC) down
 
-# Cleans up all resources including volumes.
 .PHONY: clean
 clean:
-	docker compose down -v
+	$(DC) down -v
+
+.PHONY: logs
+logs:
+	$(DC) logs -f
+
+.PHONY: services
+services:
+	$(DC) ps
