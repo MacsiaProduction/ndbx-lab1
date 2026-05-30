@@ -1,0 +1,198 @@
+{
+  "info": {
+    "_postman_id": "0049a594-411e-40e0-b43b-5fc0ef122299",
+    "name": "Lab 02 — Redis: Sessions",
+    "description": "Анонимные сессии в Redis, cookie `X-Session-Id`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Создание сессии",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{base_url}}/session",
+        "description": "POST /session без cookie — создаёт sid, ответ **201 Created**."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const setCookie = pm.response.headers.get('Set-Cookie');",
+              "if (setCookie) {",
+              "    const match = setCookie.match(/X-Session-Id=([^;]+)/);",
+              "    if (match) pm.environment.set('session_id', match[1]);",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('status 201', () => pm.response.to.have.status(201));"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "response": [
+        {
+          "name": "201 Created",
+          "status": "Created",
+          "code": 201,
+          "_postman_previewlanguage": "plain",
+          "header": [
+            {
+              "key": "Set-Cookie",
+              "value": "X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age=60"
+            }
+          ],
+          "cookie": [],
+          "body": ""
+        }
+      ]
+    },
+    {
+      "name": "Обновление сессии",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Cookie",
+            "value": "X-Session-Id={{session_id}}",
+            "type": "text"
+          }
+        ],
+        "url": "{{base_url}}/session",
+        "description": "POST /session с cookie — обновляет TTL, ответ **200 OK**."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const setCookie = pm.response.headers.get('Set-Cookie');",
+              "if (setCookie) {",
+              "    const match = setCookie.match(/X-Session-Id=([^;]+)/);",
+              "    if (match) pm.environment.set('session_id', match[1]);",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "response": [
+        {
+          "name": "200 OK",
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "plain",
+          "header": [
+            {
+              "key": "Set-Cookie",
+              "value": "X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age=60"
+            }
+          ],
+          "cookie": [],
+          "body": ""
+        }
+      ]
+    },
+    {
+      "name": "Healthcheck без cookie",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/health",
+        "description": "GET /health без cookie — не создаёт сессию, без `Set-Cookie`."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.test('no Set-Cookie', () => pm.expect(pm.response.headers.get('Set-Cookie')).to.be.undefined);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "response": [
+        {
+          "name": "200 OK",
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "cookie": [],
+          "body": "{\"status\":\"ok\"}"
+        }
+      ]
+    },
+    {
+      "name": "Healthcheck с cookie",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Cookie",
+            "value": "X-Session-Id={{session_id}}",
+            "type": "text"
+          }
+        ],
+        "url": "{{base_url}}/health",
+        "description": "GET /health с cookie — возвращает cookie, TTL в Redis не обновляется."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.test('Set-Cookie present', () => pm.expect(pm.response.headers.get('Set-Cookie')).to.include('X-Session-Id'));"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "response": [
+        {
+          "name": "200 OK",
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "key": "Set-Cookie",
+              "value": "X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age=60"
+            }
+          ],
+          "cookie": [],
+          "body": "{\"status\":\"ok\"}"
+        }
+      ]
+    }
+  ]
+}
