@@ -1,0 +1,460 @@
+{
+  "info": {
+    "_postman_id": "dbcc269f-238c-433d-a76d-aa767165a4ae",
+    "name": "Lab 03 — MongoDB: Users & Events",
+    "description": "Регистрация, auth, CRUD мероприятий (MongoDB + Redis session).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Аутентификация",
+      "description": "",
+      "item": [
+        {
+          "name": "Регистрация пользователя",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "X-Session-Id={{session_id}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/users",
+            "description": "POST /users — `full_name`, `username`, `password`. При успехе **201**, новая сессия в cookie.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"full_name\": \"Иван Иванов\", \"username\": \"ivan_demo\", \"password\": \"strong_password_123\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const setCookie = pm.response.headers.get('Set-Cookie');",
+                  "if (setCookie) {",
+                  "    const match = setCookie.match(/X-Session-Id=([^;]+)/);",
+                  "    if (match) pm.environment.set('session_id', match[1]);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "plain",
+              "header": [
+                {
+                  "key": "Set-Cookie",
+                  "value": "X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age=60"
+                }
+              ],
+              "cookie": [],
+              "body": ""
+            },
+            {
+              "name": "409 Conflict",
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age=60"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"message\":\"user already exists\"}"
+            },
+            {
+              "name": "400 Bad Request",
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age=60"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"message\":\"invalid \\\"username\\\" field\"}"
+            }
+          ]
+        },
+        {
+          "name": "Вход",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "X-Session-Id={{session_id}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/auth/login",
+            "description": "POST /auth/login — привязка `user_id` к сессии. **204** при успехе.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\": \"ivan_demo\", \"password\": \"strong_password_123\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const setCookie = pm.response.headers.get('Set-Cookie');",
+                  "if (setCookie) {",
+                  "    const match = setCookie.match(/X-Session-Id=([^;]+)/);",
+                  "    if (match) pm.environment.set('session_id', match[1]);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "204 No Content",
+              "status": "No Content",
+              "code": 204,
+              "_postman_previewlanguage": "plain",
+              "header": [
+                {
+                  "key": "Set-Cookie",
+                  "value": "X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age=60"
+                }
+              ],
+              "cookie": [],
+              "body": ""
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age=60"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"message\":\"invalid credentials\"}"
+            },
+            {
+              "name": "400 Bad Request",
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age=60"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"message\":\"invalid \\\"username\\\" field\"}"
+            }
+          ]
+        },
+        {
+          "name": "Выход",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "X-Session-Id={{session_id}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/auth/logout",
+            "description": "POST /auth/logout — удаление сессии, `Max-Age=0` в cookie."
+          },
+          "response": [
+            {
+              "name": "204 No Content",
+              "status": "No Content",
+              "code": 204,
+              "_postman_previewlanguage": "plain",
+              "header": [
+                {
+                  "key": "Set-Cookie",
+                  "value": "X-Session-Id=; HttpOnly; Path=/; Max-Age=0"
+                }
+              ],
+              "cookie": [],
+              "body": ""
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "plain",
+              "header": [
+                {
+                  "key": "Set-Cookie",
+                  "value": "X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age=60"
+                }
+              ],
+              "cookie": [],
+              "body": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Мероприятия",
+      "description": "",
+      "item": [
+        {
+          "name": "Создание мероприятия",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "X-Session-Id={{session_id}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/events",
+            "description": "POST /events — только для авторизованного пользователя. Возвращает `id`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"title\": \"Мой день рождения\", \"address\": \"г. Москва, ул. Пушкина, дом Колотушкина\", \"started_at\": \"2026-04-01T12:00:00+03:00\", \"finished_at\": \"2026-04-01T23:00:00+03:00\", \"description\": \"Приглашаю отпраздновать\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const setCookie = pm.response.headers.get('Set-Cookie');",
+                  "if (setCookie) {",
+                  "    const match = setCookie.match(/X-Session-Id=([^;]+)/);",
+                  "    if (match) pm.environment.set('session_id', match[1]);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const json = pm.response.json();",
+                  "    if (json.id) pm.environment.set('event_id', json.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age=60"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"id\":\"12e9c0b1a2b3c3d5e6f7a8b7\"}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "plain",
+              "header": [
+                {
+                  "key": "Set-Cookie",
+                  "value": "X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age=60"
+                }
+              ],
+              "cookie": [],
+              "body": ""
+            },
+            {
+              "name": "400 Bad Request",
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age=60"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"message\":\"invalid \\\"title\\\" field\"}"
+            },
+            {
+              "name": "409 Conflict",
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age=60"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"message\":\"event already exists\"}"
+            }
+          ]
+        },
+        {
+          "name": "Список мероприятий",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "X-Session-Id={{session_id}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/events?title=день&limit=10&offset=0",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "events"
+              ],
+              "query": [
+                {
+                  "key": "title",
+                  "value": "день"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "GET /events — фильтр `title`, пагинация `limit`, `offset`."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age=60"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"events\": [{\"id\": \"12e9c0b1a2b3c3d5e6f7a8b7\", \"title\": \"Мой день рождения\", \"description\": \"Приглашаю отпраздновать\", \"location\": {\"address\": \"г. Москва, ул. Пушкина, дом Колотушкина\"}, \"created_at\": \"2026-03-14T14:59:32+03:00\", \"created_by\": \"65e9c0b1a2b3c4d5e6f7a8b9\", \"started_at\": \"2026-04-01T12:00:00+03:00\", \"finished_at\": \"2026-04-01T23:00:00+03:00\"}], \"count\": 1}"
+            },
+            {
+              "name": "200 Empty",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age=60"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"events\":[],\"count\":0}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,47 +1,71 @@
-# EventHub - NoSQL Database Project
+# EventHub
 
 [![EventHub](https://github.com/{your_username}/{your_repo}/actions/workflows/eventhub.yml/badge.svg)](https://github.com/{your_username}/{your_repo}/actions/workflows/eventhub.yml)
 
-Backend-сервис платформы мероприятий для практического изучения NoSQL баз данных.
+Backend-сервис платформы мероприятий. Выполняется поэтапно в рамках 7 лабораторных работ курса по NoSQL базам данных.
 
-## С чего начать
+**Стек:** Redis · MongoDB (sharded) · Cassandra · Neo4j · Spring Boot (Kotlin)
 
-1. **‼️ Настройте репозиторий** — проведите обязательную настройку контрибьюторов и защиты ветки (см. ниже)
-2. **[Лабораторные работы](https://github.com/sitnikovik/ndbx/tree/main/docs/lab)** — технические задания для каждой лабораторной работы
-3. **[CONTRIBUTING.md](CONTRIBUTING.md)** — требования к структуре проекта, процесс разработки и проверки
-4. **[Документация курса](https://github.com/sitnikovik/ndbx)** — методические материалы и дополнительные ресурсы
+## Запуск
 
-> 💡 Не забудьте поменять `{your_username}` и `{your_repo}` в badge на ваши имя пользователя и название репозитория.
+```bash
+make run   # docker compose --env-file .env.local up -d --build
+make stop  # docker compose down
+```
 
-## Настройка репозитория
+После запуска сервис доступен на `http://localhost:8080` (порт задаётся в `.env.local`).
 
-### Защита основной ветки
+## API
 
-После создания репозитория из шаблона **обязательно настройте правила защиты для ветки `main`**:
+Коллекции Postman для каждой лабораторной находятся в [`api/`](api/).
 
-1. Откройте **Settings** → **Branches** → **Add classic branch protection rule**
-2. В поле **Branch name pattern** укажите: `main`
-3. Включите следующие опции:
-   - **Require a pull request before merging**
-     - Require approvals: **1**: требует минимум одного одобрения перед слиянием
-   - ***Require status checks to pass before merging***
-     - Выберите *"autograder"*: проверит все лабораторные работы автоматически
-     - ***Require branches to be up to date before merging*** (рекомендуется):
-     требует, чтобы ветка PR была синхронизирована с последними изменениями из основной ветки перед слиянием
-   - ***Do not allow bypassing the above settings***: запрещает обход настроек защиты ветки
-4. Нажмите **Create** или **Save changes**
+| Файл | Лабораторная |
+|------|-------------|
+| `lab01.postman_collection.json` | Lab 01 — Healthcheck |
+| `lab02.postman_collection.json` | Lab 02 — Redis: Sessions |
+| `lab03.postman_collection.json` | Lab 03 — MongoDB: Users & Events |
+| `lab04.postman_collection.json` | Lab 04 — MongoDB: Sharding |
+| `lab05.postman_collection.json` | Lab 05 — Cassandra: Reactions |
+| `lab06.postman_collection.json` | Lab 06 — Cassandra: Reviews |
+| `lab07.postman_collection.json` | Lab 07 — Neo4j: Recommendations |
 
-> ⚠️ **Важно:** Без этих настроек автоматические проверки не будут блокировать PR с ошибками.
+**Импорт:** Postman → Import → выбрать все файлы из `api/` → выбрать environment **EventHub Local**.
 
-### Добавление коллабораторов
+### Эндпоинты
 
-Чтобы преподаватели могли проводить код-ревью:
+| Method | Path | Auth | Описание |
+|--------|------|------|----------|
+| `GET` | `/health` | — | Healthcheck |
+| `POST` | `/session` | — | Создать / обновить анонимную сессию |
+| `POST` | `/users` | — | Регистрация |
+| `POST` | `/auth/login` | session | Вход |
+| `POST` | `/auth/logout` | session | Выход |
+| `GET` | `/users` | — | Поиск организаторов (`name`, `id`, `limit`, `offset`) |
+| `GET` | `/users/{id}` | — | Карточка организатора |
+| `GET` | `/users/{id}/events` | — | Мероприятия организатора |
+| `POST` | `/events` | auth | Создать мероприятие |
+| `GET` | `/events` | — | Список / поиск мероприятий |
+| `GET` | `/events/{id}` | — | Карточка мероприятия |
+| `PATCH` | `/events/{id}` | organizer | Изменить `category`, `price`, `city` |
+| `POST` | `/events/{id}/like` | auth | Лайк |
+| `POST` | `/events/{id}/dislike` | auth | Дизлайк |
+| `POST` | `/events/{id}/reviews` | auth | Оставить отзыв |
+| `GET` | `/events/{id}/reviews` | — | Список отзывов (`limit`, `offset`) |
+| `PATCH` | `/events/{id}/reviews/{rid}` | author | Изменить отзыв |
+| `GET` | `/recommendations` | auth | Рекомендации (Neo4j + Redis cache) |
 
-1. Откройте **Settings** → **Collaborators**
-2. Нажмите **Add people**
-3. Добавьте всех кто есть в списке ревьюеров в файле [CODEOWNERS](CODEOWNERS)
-4. Выберите роль: **Write** (или выше), иначе ревьюер не сможет одобрить PR
+`GET /events` и `GET /events/{id}` принимают `?include=reactions`, `?include=reviews` или `?include=reactions,reviews`.
 
-## Помощь
+## Лабораторные работы
 
-Возникли вопросы? → [@sitnikovik](https://t.me/sitnikovik)
+| # | Тема | Хранилище |
+|---|------|-----------|
+| 1 | Healthcheck | — |
+| 2 | Анонимные сессии | Redis |
+| 3 | Пользователи и мероприятия | MongoDB |
+| 4 | Шардирование и репликация | MongoDB |
+| 5 | Реакции | Cassandra + Redis |
+| 6 | Отзывы | Cassandra + Redis |
+| 7 | Рекомендации | Neo4j + Redis |
+
+Задания: [github.com/sitnikovik/ndbx/docs/lab](https://github.com/sitnikovik/ndbx/tree/main/docs/lab)

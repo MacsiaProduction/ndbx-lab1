@@ -1,0 +1,412 @@
+{
+  "info": {
+    "_postman_id": "a5d33d29-6b58-4e2c-82e7-be26e3b72c3e",
+    "name": "Lab 06 — Cassandra: Reviews",
+    "description": "Отзывы (Cassandra + Redis), `include=reviews`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Отзывы",
+      "description": "",
+      "item": [
+        {
+          "name": "Создать отзыв",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "X-Session-Id={{session_id}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/events/{{event_id}}/reviews",
+            "description": "POST /events/{event_id}/reviews — `comment` (≤300), `rating` 1–5.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"comment\": \"Великолепный спектакль!\", \"rating\": 5}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const setCookie = pm.response.headers.get('Set-Cookie');",
+                  "if (setCookie) {",
+                  "    const match = setCookie.match(/X-Session-Id=([^;]+)/);",
+                  "    if (match) pm.environment.set('session_id', match[1]);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const json = pm.response.json();",
+                  "    if (json.id) pm.environment.set('review_id', json.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age=60"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"id\":\"069b9830-4b5f-487a-ae89-424619ca2a35\"}"
+            },
+            {
+              "name": "409 Conflict",
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age=60"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"message\":\"Already exists\"}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age=60"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"message\":\"Event not found\"}"
+            },
+            {
+              "name": "400 Bad Request",
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age=60"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"message\":\"invalid \\\"rating\\\" field\"}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "plain",
+              "header": [],
+              "cookie": [],
+              "body": ""
+            }
+          ]
+        },
+        {
+          "name": "Список отзывов",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "X-Session-Id={{session_id}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/events/{{event_id}}/reviews?limit=10&offset=0",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "events",
+                "{{event_id}}",
+                "reviews"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "GET /events/{event_id}/reviews — `limit`, `offset` (без SQL OFFSET в Cassandra)."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age=60"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"reviews\": [{\"id\": \"56e2c0b3a2b4c1a5e6f7f8b3\", \"event_id\": \"12e9c0b1a2b3c3d5e6f7a8b7\", \"comment\": \"Великолепный спектакль!\", \"created_at\": \"2026-03-14T14:59:32+03:00\", \"created_by\": \"65e9c0b1a2b3c4d5e6f7a8b9\", \"rating\": 5, \"updated_at\": \"2026-03-14T14:59:32+03:00\"}], \"count\": 1}"
+            },
+            {
+              "name": "200 Empty",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age=60"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"reviews\":[],\"count\":0}"
+            }
+          ]
+        },
+        {
+          "name": "Изменить отзыв",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "X-Session-Id={{session_id}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{base_url}}/events/{{event_id}}/reviews/{{review_id}}",
+            "description": "PATCH — только автор отзыва, обновляет `updated_at`.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"rating\": 3, \"comment\": \"На самом деле, так себе...\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [
+            {
+              "name": "204 No Content",
+              "status": "No Content",
+              "code": 204,
+              "_postman_previewlanguage": "plain",
+              "header": [
+                {
+                  "key": "Set-Cookie",
+                  "value": "X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age=60"
+                }
+              ],
+              "cookie": [],
+              "body": ""
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age=60"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"message\":\"Event not found\"}"
+            },
+            {
+              "name": "401 Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "plain",
+              "header": [],
+              "cookie": [],
+              "body": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Мероприятия с отзывами",
+      "description": "",
+      "item": [
+        {
+          "name": "Список с reviews",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "X-Session-Id={{session_id}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/events?include=reviews&limit=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "events"
+              ],
+              "query": [
+                {
+                  "key": "include",
+                  "value": "reviews"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "GET /events?include=reviews."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age=60"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"events\": [{\"id\": \"12e9c0b1a2b3c3d5e6f7a8b7\", \"reviews\": {\"count\": 123, \"rating\": 4.8}}], \"count\": 1}"
+            }
+          ]
+        },
+        {
+          "name": "Список reactions и reviews",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "X-Session-Id={{session_id}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/events?include=reactions,reviews&limit=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "events"
+              ],
+              "query": [
+                {
+                  "key": "include",
+                  "value": "reactions,reviews"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "GET /events?include=reactions,reviews."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                },
+                {
+                  "key": "Set-Cookie",
+                  "value": "X-Session-Id=3f8a2c1d9e4b7f0a5c6d2e8b1a3f9c7d; HttpOnly; Path=/; Max-Age=60"
+                }
+              ],
+              "cookie": [],
+              "body": "{\"events\": [{\"id\": \"12e9c0b1a2b3c3d5e6f7a8b7\", \"reactions\": {\"likes\": 0, \"dislikes\": 0}, \"reviews\": {\"count\": 0, \"rating\": 0.0}}], \"count\": 1}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
