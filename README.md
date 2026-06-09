@@ -15,6 +15,89 @@ make stop  # docker compose down
 
 После запуска сервис доступен на `http://localhost:8080` (порт задаётся в `.env.local`).
 
+## Архитектура
+
+Сервис реализован как REST API на Spring Boot, а каждая лабораторная добавляет отдельный слой хранения или кэширования.
+
+### Схема компонентов
+
+```mermaid
+flowchart LR
+    Client["Клиент / Postman-Newman АТ"] --> Api["Spring Boot API"]
+
+    Api --> Session["SessionService / AuthController"]
+    Api --> Users["UserController / UserRegistrationService / UserQueryService"]
+    Api --> Events["EventController / EventCommandService / EventQueryService"]
+    Api --> Reactions["EventReactionService"]
+    Api --> Reviews["EventReviewService"]
+    Api --> Recommendations["RecommendationController / RecommendationService"]
+
+    Session --> Redis["Redis<br/>сессии и кэши"]
+    Users --> Mongo["MongoDB sharded cluster<br/>users, events"]
+    Events --> Mongo
+    Reactions --> Cassandra["Cassandra<br/>reactions, reviews"]
+    Reactions --> Redis
+    Reactions --> Neo4j["Neo4j<br/>граф LIKED"]
+    Reviews --> Cassandra
+    Reviews --> Redis
+    Recommendations --> Neo4j
+    Recommendations --> Mongo
+    Recommendations --> Redis
+```
+
+### UML-схема запроса рекомендаций
+
+```mermaid
+sequenceDiagram
+    participant U as Клиент
+    participant C as RecommendationController
+    participant S as SessionService
+    participant R as Redis
+    participant RS as RecommendationService
+    participant G as Neo4j
+    participant M as MongoDB
+
+    U->>C: GET /recommendations + X-Session-Id
+    C->>S: resolveSession()
+    S->>R: проверить sid:{id}
+    R-->>S: user_id
+    C->>RS: recommendFor(user_id)
+    RS->>R: HGET user:{id}:recomms
+    alt cache hit
+        R-->>RS: cached events
+    else cache miss
+        RS->>G: MATCH LIKED -> rec
+        G-->>RS: event ids + popularity
+        RS->>M: findAllById(event ids)
+        M-->>RS: event documents
+        RS->>R: HSET + EXPIRE user:{id}:recomms
+    end
+    RS-->>C: recommendations
+    C-->>U: 200 OK
+```
+
+## Тестирование
+
+Проект проверяется автоматическим пайплайном курса и локальными API-автотестами (АТ).
+
+- CI: GitHub Actions запускает autograder из `sitnikovik/ndbx`, номер лабораторной берётся из `.labrc` (`LAB=7`).
+- Локально: API-АТ описаны Postman-коллекциями из [`api/`](api/) и общим окружением `environment.postman_environment.json`.
+- Через UI: поднять стенд через `make run`, импортировать коллекции и environment **EventHub Local**, затем запускать коллекции через Postman Collection Runner.
+- Через CLI: при установленном `newman` можно прогнать одну коллекцию с подготовленным environment командой `newman run api/lab07.postman_collection.json -e api/environment.postman_environment.json`.
+- Сквозной CLI-прогон: коллекции `lab01`-`lab07` запускаются по порядку, а environment экспортируется после каждой коллекции, чтобы сохранялись `session_id`, `user_id`, `event_id` и `review_id`.
+
+```bash
+make run
+cp api/environment.postman_environment.json /tmp/eventhub.postman_environment.json
+for collection in api/lab0*.postman_collection.json; do
+  newman run "$collection" \
+    -e /tmp/eventhub.postman_environment.json \
+    --export-environment /tmp/eventhub.postman_environment.json
+done
+```
+
+Покрытие АТ: healthcheck, анонимные сессии, регистрация и логин, создание, просмотр, обновление и поиск мероприятий, реакции, отзывы и рекомендации.
+
 ## API
 
 Коллекции Postman для каждой лабораторной находятся в [`api/`](api/).
